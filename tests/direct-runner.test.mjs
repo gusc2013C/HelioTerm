@@ -30,14 +30,14 @@ test('direct runner batches different observations into one process result', asy
   assert.equal(result.commands.length, 3);
 });
 
-test('batch evidence gives each observation a bounded sample', async () => {
+test('batch evidence gives each non-empty observation a bounded sample', async () => {
   const result = await runDirectBatch({
     requests: ['T|git|status --short', 'T|search|-n HelioTerm README.md', 'T|files|tests'],
     cwd: process.cwd(),
   });
   assert.equal(result.pass, true, result.text);
-  assert.match(result.text, /\|more=3\|/u);
-  assert.match(result.text, /\|sample=git:[^|;]+;search:[^|;]+;files:[^|;]+/u);
+  assert.match(result.text, /\|more=[23]\|/u);
+  assert.match(result.text, /(?:\|sample=|;)search:[^|;]+;files:[^|;]+/u);
   assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
 });
 

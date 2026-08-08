@@ -60,6 +60,8 @@ npm run preflight
 
 HelioTerm is MIT licensed.
 
+The direct search and file-list operations require `ripgrep` (`rg`); read-only Git operations require `git`. `npm run preflight` now fails closed when either executable is unavailable. Python is required only for the optional `pytest` operation.
+
 ## Verified results
 
 The first real Codex Desktop acceptance reused one terminal for two exact test requests, proved 2 requests/2 calls and zero child spawns, passed 14/14 independent tests, and compressed 1,390 raw bytes to 48 bytes (3.45%). See [the acceptance report](docs/REAL-DESKTOP-ACCEPTANCE.md).

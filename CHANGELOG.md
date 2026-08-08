@@ -10,3 +10,4 @@
 - Prioritize stderr and failed-operation evidence so successful prefixes cannot hide errors.
 - Keep the Luna/high model-backed role and MCP transport explicit, optional fallbacks.
 - Validate against HelioTerm itself and two unrelated Python repositories, including 46 passing real-project tests.
+- Validate required Git and ripgrep executables during preflight and exercise Windows and Ubuntu CI without duplicate branch/PR runs.

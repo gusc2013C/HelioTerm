@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "HELIOTERM_DESKTOP_LUNA_NATIVE_V1",
+  "transport": "codex-desktop-native-thread-tools",
+  "model": "gpt-5.6-luna",
+  "effortsTested": ["low", "high", "xhigh"],
+  "defaultEffort": "high",
+  "target": "projectless",
+  "threadId": "019fe1ce-5c27-7c73-b46d-512962f551e6",
+  "archived": true,
+  "cliProcessStarted": false,
+  "tokenUsageAvailableFromDesktopTools": false,
+  "turns": [
+    {
+      "durationMilliseconds": 5024,
+      "response": "{\"note\":\"Updated MCP, runner, firewall, kernel, docs, tests, and Luna benchmarks\"}",
+      "qualityAccepted": true
+    },
+    {
+      "durationMilliseconds": 1690,
+      "response": "{\"note\":\"Pytest passed and the clean tree was fully searched and reviewed\"}",
+      "qualityAcceptedUnderInitialContract": true,
+      "qualityAcceptedUnderFinalCleanResultContract": false
+    },
+    {
+      "durationMilliseconds": 3666,
+      "response": "{\"note\":\"\"}",
+      "qualityAccepted": true,
+      "contract": "clean evidence returns an empty note"
+    },
+    {
+      "effort": "high",
+      "durationMilliseconds": 7589,
+      "response": "{\"note\":\"Serialized MCP flow, literal TOML, and Desktop-contained Luna transport\"}",
+      "qualityAccepted": true
+    },
+    {
+      "effort": "xhigh",
+      "durationMilliseconds": 2270,
+      "response": "{\"note\":\"Nondeterministic diagnostics can obscure failures and erode trust\"}",
+      "qualityAccepted": true,
+      "contract": "summarize underlying engineering risk"
+    }
+  ],
+  "observations": {
+    "sameThreadReused": true,
+    "fastestReusedTurnMilliseconds": 1690,
+    "firstToFastestReusedLatencyReductionPercent": 66.36,
+    "workspaceMutated": false,
+    "desktopTaskArchived": true
+  }
+}

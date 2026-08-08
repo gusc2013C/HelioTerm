@@ -8,6 +8,8 @@ test('accepts a compact truthful exchange and measures compression', () => {
   assert.equal(result.pass, true);
   assert.equal(result.schemaVersion, 'HELIOTERM_EXCHANGE_V1');
   assert.ok(result.metrics.compressionRatio < 0.02);
+  assert.equal(result.metrics.tokenEstimator, 'utf8-bytes-ceil-div4-v1');
+  assert.ok(result.metrics.estimatedTokensSaved > 0);
 });
 
 test('rejects malformed, oversized, unsupported, and multiline requests', () => {
@@ -22,6 +24,15 @@ test('files accepts only one repo-relative directory', () => {
   assert.equal(validateRequest('T|files|tests').pass, true);
   for (const argument of ['', ' ', '/tmp', String.raw`\\server\share`, String.raw`C:\repo`, 'C:repo', '../src', 'src/../other', String.raw`src\..\other`, 'src other', '-hidden']) {
     assert.equal(validateRequest(`T|files|${argument}`).pass, false, argument);
+  }
+});
+
+test('process accepts only a bounded name, pid, or all query', () => {
+  for (const argument of ['node', 'node.exe', '1234', 'all']) {
+    assert.equal(validateRequest(`T|process|${argument}`).pass, true, argument);
+  }
+  for (const argument of ['', 'node extra', '*', '/FI IMAGENAME eq node.exe', '../node']) {
+    assert.equal(validateRequest(`T|process|${argument}`).pass, false, argument);
   }
 });
 

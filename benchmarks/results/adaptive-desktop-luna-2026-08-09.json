@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "HELIOTERM_ADAPTIVE_DESKTOP_LUNA_V1",
+  "recordedAt": "2026-08-09T00:23:00+08:00",
+  "sourceBaseVersion": "0.1.0",
+  "architecture": {
+    "ruleFirst": true,
+    "minimumRawBytes": 2048,
+    "model": "gpt-5.6-luna",
+    "defaultEffort": "high",
+    "complexEffort": "xhigh",
+    "target": "projectless",
+    "maximumReusedTurns": 8,
+    "canonicalFactsOwnedByCode": true,
+    "providerTokenUsageAvailable": false
+  },
+  "mcpProjectionProbe": {
+    "threadId": "019fe229-2ae0-7831-8798-dc9c77963fb3",
+    "turns": 2,
+    "newToolsProjectedBeforeDesktopRestart": false,
+    "codexCliModelProcessStarted": false,
+    "archived": true
+  },
+  "reuseAcceptance": {
+    "threadId": "019fe22e-b57b-7dd2-8365-a7b9c14ed667",
+    "hostId": "local",
+    "transport": "codex-desktop-native-thread-tools-with-local-ticket-reader-fallback",
+    "model": "gpt-5.6-luna",
+    "effort": "high",
+    "codexCliModelProcessStarted": false,
+    "archived": true,
+    "turns": [
+      {
+        "ticket": "aNnMMMSMuCWWJQpA",
+        "kind": "working-tree-change",
+        "durationMilliseconds": 23954,
+        "routeBytes": 86,
+        "rawBytes": 3582,
+        "contextBytes": 4060,
+        "responseBytes": 79,
+        "finalBytes": 135,
+        "accepted": true
+      },
+      {
+        "ticket": "QEqupQ8VTLTosDMM",
+        "kind": "command-failure",
+        "durationMilliseconds": 6161,
+        "routeBytes": 95,
+        "rawBytes": 6660,
+        "contextBytes": 7092,
+        "responseBytes": 73,
+        "finalBytes": 130,
+        "accepted": true
+      }
+    ]
+  },
+  "observations": {
+    "firstTurnMilliseconds": 23954,
+    "reusedTurnMilliseconds": 6161,
+    "reuseLatencyReductionPercent": 74.28,
+    "rawFallbackBytes": 10242,
+    "solVisibleRouteAndFinalBytes": 446,
+    "solVisibleByteReductionVersusRawFallbackPercent": 95.65,
+    "rawFallbackEstimatedTokens": 2561,
+    "solVisibleEstimatedTokens": 113,
+    "lunaContextAndResponseEstimatedTokens": 2827,
+    "userSuppliedLunaCostRatioVersusSol": 0.04,
+    "costWeightedReductionVersusRawSolFallbackPercent": 91.17,
+    "warning": "The weighted value is a sensitivity calculation using the user-supplied 1:25 ratio, not provider billing. The channel avoids a raw Sol fallback; it does not claim fewer aggregate model-visible bytes than deterministic rule-only output."
+  }
+}

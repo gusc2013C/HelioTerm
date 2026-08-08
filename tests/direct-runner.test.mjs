@@ -152,13 +152,13 @@ test('files lists one repo-relative directory without a shell', async () => {
   const result = await runDirect({ request: 'T|files|tests', cwd: process.cwd() });
   assert.equal(result.pass, true, result.text);
   assert.deepEqual(result.command, { file: 'rg', args: ['--files', 'tests'] });
-  assert.match(result.text, /\|sample=tests[\\/]direct-runner\.test\.mjs/u);
+  assert.match(result.text, /\|sample=[^|]*tests[\\/][^|;]+\.test\.mjs/u);
 });
 
 test('direct runner validates a whole batch before executing anything', async () => {
   const result = await runDirectBatch({ requests: ['T|git|status --short', 'T|git|reset --hard'], cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|runner-error|model=0');
+  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
   assert.deepEqual(result.commands, []);
 });
 
@@ -171,5 +171,5 @@ test('direct runner fails closed before execution for an invalid request', async
 test('direct runner rejects a mutating git operation before execution', async () => {
   const result = await runDirect({ request: 'T|git|reset --hard', cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|runner-error|model=0');
+  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
 });

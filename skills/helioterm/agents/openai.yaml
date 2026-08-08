@@ -1,4 +1,6 @@
 interface:
   display_name: "HelioTerm"
-  short_description: "Fast zero-model batched terminal"
-  default_prompt: "Use $helioterm direct mode and batch all bounded observations into one local call."
+  short_description: "Default zero-model terminal compressor"
+  default_prompt: "Use $helioterm for bounded tests, checks, Git, search, source/config inspection, dependency, version, benchmark, and process observations; batch up to four compatible operations."
+policy:
+  allow_implicit_invocation: true

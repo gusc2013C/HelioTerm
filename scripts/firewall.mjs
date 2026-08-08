@@ -3,10 +3,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isValidFilesArgument } from './kernel.mjs';
+import { isValidOperationArgument, OPERATIONS } from './kernel.mjs';
+import { measureTokenSavings } from './token-savings.mjs';
 
 export const HELIOTERM_LIMITS = Object.freeze({ maxRequests: 8, maxCommandsPerRequest: 4, maxRequestBytes: 256, maxResponseBytes: 256 });
-const OPERATIONS = new Set(['test', 'pytest', 'build', 'git', 'search', 'files', 'bench', 'process']);
 const RESPONSE_KINDS = new Set(['OK', 'FAIL', 'MATCH', 'MORE']);
 const check = (name, pass, actual, expected) => ({ name, pass: Boolean(pass), actual, ...(expected === undefined ? {} : { expected }) });
 export const utf8Bytes = (value) => Buffer.byteLength(typeof value === 'string' ? value : '', 'utf8');
@@ -19,7 +19,7 @@ export function validateRequest(request) {
   const checks = [
     check('request-shape', Boolean(match), request ?? null, 'T|operation|argument on one line'),
     check('request-operation', OPERATIONS.has(operation), operation, [...OPERATIONS]),
-    ...(operation === 'files' ? [check('files-directory', isValidFilesArgument(argument), argument, 'one repo-relative directory')] : []),
+    ...(OPERATIONS.has(operation) ? [check('operation-argument', isValidOperationArgument(operation, argument), argument, 'safe arguments for the selected operation')] : []),
     check('request-byte-limit', bytes <= HELIOTERM_LIMITS.maxRequestBytes, bytes, HELIOTERM_LIMITS.maxRequestBytes),
   ];
   return { pass: checks.every((entry) => entry.pass), bytes, operation, argument, checks };
@@ -48,6 +48,7 @@ export function measureExchange({ request, response, commands, rawOutput = '' })
     check('response-command-count', Number.isSafeInteger(claimed) && claimed === commands, Number.isSafeInteger(claimed) ? claimed : null, commands),
   ];
   const rawOutputBytes = utf8Bytes(rawOutput);
+  const savings = measureTokenSavings({ rawText: rawOutput, compactText: response ?? '' });
   return {
     schemaVersion: 'HELIOTERM_EXCHANGE_V1',
     pass: checks.every((entry) => entry.pass),
@@ -60,6 +61,10 @@ export function measureExchange({ request, response, commands, rawOutput = '' })
       rawOutputBytes,
       compressedBytes: responseResult.bytes,
       compressionRatio: rawOutputBytes > 0 ? responseResult.bytes / rawOutputBytes : null,
+      estimatedRawTokens: savings.rawEstimatedTokens,
+      estimatedCompressedTokens: savings.compactEstimatedTokens,
+      estimatedTokensSaved: savings.savedEstimatedTokens,
+      tokenEstimator: savings.estimator,
     },
     checks,
   };

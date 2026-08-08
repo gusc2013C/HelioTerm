@@ -1,0 +1,104 @@
+{
+  "date": "2026-08-08",
+  "transport": "Codex Desktop native MCP projection",
+  "initialActiveCacheVersion": "0.1.0",
+  "activeSkillVisible": true,
+  "activeMcpTools": ["run", "savings"],
+  "operationEnumCount": 15,
+  "cachedDirectAcceptance": {
+    "project": "Heliolune",
+    "testsPassed": 188,
+    "compactResultModelProof": true
+  },
+  "mcpAcceptance": {
+    "runs": 4,
+    "operations": ["read", "git", "deps", "version"],
+    "projects": ["Heliolune", "HelioTerm"],
+    "rawBytes": 2985,
+    "compactBytes": 373,
+    "savedBytes": 2612,
+    "rawEstimatedTokens": 748,
+    "compactEstimatedTokens": 94,
+    "savedEstimatedTokens": 654,
+    "reportEstimatedTokens": 42,
+    "netEstimatedTokens": 612,
+    "byteReductionPercent": 87.5,
+    "modelTokensUsedByHelioTerm": 0
+  },
+  "allOperationsAcceptance": {
+    "passed": 15,
+    "total": 15,
+    "operations": [
+      "test",
+      "pytest",
+      "build",
+      "git",
+      "search",
+      "files",
+      "bench",
+      "process",
+      "read",
+      "list",
+      "json",
+      "stat",
+      "check",
+      "deps",
+      "version"
+    ],
+    "nodeTestsPassed": 61,
+    "pythonTestsPassed": 34,
+    "cumulativeRunsIncludingInitialAcceptance": 19,
+    "cumulativeRawBytes": 31530,
+    "cumulativeCompactBytes": 1615,
+    "cumulativeSavedEstimatedTokens": 7479,
+    "cumulativeReportEstimatedTokens": 44,
+    "cumulativeNetEstimatedTokens": 7435,
+    "cumulativeByteReductionPercent": 94.9
+  },
+  "transportParity": {
+    "operation": "read README.md 1 24",
+    "canonicalFactsEqual": true,
+    "rawBytesEqual": true,
+    "rawBytes": 1419
+  },
+  "issueFound": {
+    "activeMcpRunMissingModelProof": true,
+    "impact": "MCP and direct results could not use one uniform zero-model proof rule."
+  },
+  "sourceFix": {
+    "mcpRunAppendsModelProof": true,
+    "meterIncludesModelProofBytes": true,
+    "fullTestsPassed": 61,
+    "preflightPassed": true,
+    "pluginValidationPassed": true,
+    "nextCacheVersion": "0.1.0+codex.20260808153635",
+    "requiresDesktopRestartToActivate": false
+  },
+  "activationAcceptance": {
+    "activeCacheVersion": "0.1.0+codex.20260808153635",
+    "mcpRunModelProof": true,
+    "modelProofCheckedOperations": ["read", "process", "version"],
+    "meterIncludesModelProofBytes": true,
+    "actualCompactByteIncrement": 212,
+    "meterCompactByteIncrement": 212,
+    "accountingMatches": true,
+    "cumulativeRuns": 9,
+    "cumulativeRawBytes": 46741,
+    "cumulativeCompactBytes": 636,
+    "cumulativeNetEstimatedTokens": 11485,
+    "cumulativeByteReductionPercent": 98.6
+  },
+  "finalValidation": {
+    "nodeTestsPassed": 61,
+    "preflightPassed": true,
+    "diffCheckPassed": true,
+    "allValidationResultsHaveModelProof": true,
+    "cumulativeRuns": 13,
+    "cumulativeRawBytes": 53830,
+    "cumulativeCompactBytes": 923,
+    "cumulativeNetEstimatedTokens": 13186,
+    "cumulativeByteReductionPercent": 98.3
+  },
+  "codexCliUsed": false,
+  "lunaUsed": false
+}

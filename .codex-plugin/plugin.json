@@ -1,7 +1,7 @@
 {
   "name": "helioterm",
-  "version": "0.1.0",
-  "description": "Independent model-bound semantic terminal with deterministic commands and persisted proof.",
+  "version": "0.1.1+codex.20260808165355",
+  "description": "Deterministic terminal compression with an adaptive Desktop-native Luna semantic channel.",
   "author": {
     "name": "Sicheng Gu",
     "url": "https://github.com/gusc2013C"
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "HelioTerm",
-    "shortDescription": "Fast zero-model batched terminal.",
-    "longDescription": "HelioTerm batches bounded Node and Python tests, build, read-only Git, search, file-list, benchmark, and process observations into one deterministic local call with compact output; a reusable Luna leaf is the explicit model-backed fallback.",
+    "shortDescription": "Rule-first terminal compression with adaptive Luna.",
+    "longDescription": "HelioTerm batches bounded tests, builds, quality checks, read-only Git, search, source/config inspection, dependency, version, benchmark, and process observations into one deterministic local call. Large material failures or changes can route bounded evidence to one reusable Desktop-native Luna task; code validates the note and the task is archived after the burst.",
     "developerName": "Sicheng Gu",
     "category": "Productivity",
     "capabilities": [
@@ -29,7 +29,7 @@
     ],
     "websiteURL": "https://github.com/gusc2013C/HelioTerm",
     "defaultPrompt": [
-      "Use $helioterm direct mode and batch all bounded observations into one local call."
+      "Use $helioterm for bounded tests, checks, Git, search, source/config inspection, dependency, version, benchmark, and process observations; batch up to four compatible operations."
     ]
   },
   "mcpServers": "./.mcp.json"

@@ -1,0 +1,97 @@
+{
+  "date": "2026-08-08",
+  "scope": "terminal-observation-content-only",
+  "estimator": "utf8-bytes-ceil-div4-v1",
+  "method": {
+    "runsPerProject": 7,
+    "ordering": "alternating plain-first and helioterm-first after one warmup",
+    "comparison": "median raw stdout+stderr bytes versus median HelioTerm stdout+stderr bytes",
+    "workingTreeGuard": true,
+    "providerTokenUsageAvailable": false
+  },
+  "projects": [
+    {
+      "project": "HelioTerm",
+      "path": "D:\\code\\HelioTerm",
+      "workload": [
+        "node tests/*.test.mjs",
+        "node scripts/preflight.mjs --compact",
+        "git status --short",
+        "rg -n Luna|token|savings|Desktop scripts tests docs README.md skills"
+      ],
+      "pass": true,
+      "testsPassed": 53,
+      "workingTreeUnchanged": true,
+      "plainMedianMilliseconds": 1623.1196,
+      "heliotermMedianMilliseconds": 1660.479,
+      "latencyDifferencePercent": 2.3017034604,
+      "plainOutputBytes": 29741,
+      "heliotermOutputBytes": 177,
+      "plainEstimatedTokens": 7436,
+      "heliotermEstimatedTokens": 45,
+      "savedEstimatedTokens": 7391,
+      "outputReductionPercent": 99.4048619751,
+      "compactResult": "OK|calls=4|pass=53|ops=test,bench,git/21,search/137|more=2|sample=git:?? benchmarks/results/desktop-luna-n;search:README.md:3:HelioTerm is a small, in|raw=29741|ms=1612|model=0"
+    },
+    {
+      "project": "TactileGear",
+      "path": "D:\\code\\TactileGear",
+      "workload": [
+        "pytest tests",
+        "git status --short",
+        "rg --files tests",
+        "rg -n TODO|FIXME|raise|except src tests"
+      ],
+      "pass": true,
+      "testsPassed": 34,
+      "workingTreeUnchanged": true,
+      "plainMedianMilliseconds": 482.6977,
+      "heliotermMedianMilliseconds": 494.7995,
+      "latencyDifferencePercent": 2.5071178089,
+      "plainOutputBytes": 4246,
+      "heliotermOutputBytes": 221,
+      "plainEstimatedTokens": 1062,
+      "heliotermEstimatedTokens": 56,
+      "savedEstimatedTokens": 1006,
+      "outputReductionPercent": 94.7951012718,
+      "compactResult": "OK|calls=4|pass=34|ops=pytest,git/30,files/8,search/36|more=3|sample=git:?? PROJECT_MAP_FOR_PRO.md,?? src/gui;files:tests\\__init__.py,tests\\test_core_be;search:src\\hardware\\vjoy_device.py:94: exce|raw=4246|ms=430|model=0"
+    }
+  ],
+  "combined": {
+    "plainOutputBytes": 33987,
+    "heliotermOutputBytes": 398,
+    "plainEstimatedTokens": 8497,
+    "heliotermEstimatedTokens": 100,
+    "savedEstimatedTokens": 8397,
+    "outputReductionPercent": 98.8289640157
+  },
+  "wholeTaskSensitivity": [
+    {
+      "assumedTerminalObservationShare": 0.2,
+      "estimatedWholeTaskTokenSavingsPercent": 19.7657928031
+    },
+    {
+      "assumedTerminalObservationShare": 0.35,
+      "estimatedWholeTaskTokenSavingsPercent": 34.5901374055
+    },
+    {
+      "assumedTerminalObservationShare": 0.5,
+      "estimatedWholeTaskTokenSavingsPercent": 49.4144820078
+    }
+  ],
+  "semanticAcceptance": {
+    "transport": "Codex Desktop native thread tools",
+    "model": "gpt-5.6-luna",
+    "reasoningEffort": "high",
+    "durationMilliseconds": 6852,
+    "usable": true,
+    "note": "Both lines retain status, scope, output size, timing, and follow-up signals.",
+    "threadArchived": true,
+    "codexCliProcessStarted": false
+  },
+  "limitations": [
+    "Token counts are deterministic UTF-8 byte estimates, not provider billing counters.",
+    "Whole-task figures are sensitivity scenarios because Desktop does not expose total thread token usage.",
+    "The benchmark measures terminal observation traffic, excluding prompts, source edits, reasoning, and hidden system context."
+  ]
+}

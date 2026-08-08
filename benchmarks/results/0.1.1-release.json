@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "HELIOTERM_RELEASE_V1",
+  "version": "0.1.1",
+  "date": "2026-08-09",
+  "source": {
+    "testsPassed": 76,
+    "preflightPassed": true,
+    "gitDiffCheckPassed": true
+  },
+  "installedPlugin": {
+    "baseVersion": "0.1.1",
+    "cachebusterPolicy": "single codex timestamp suffix",
+    "testsPassed": 76,
+    "preflightPassed": true,
+    "pluginValidationPassed": true,
+    "pathlessSearchPassed": true,
+    "windowsProcessFilterPassed": true
+  },
+  "realProjects": [
+    {
+      "project": "TactileGear",
+      "testsPassed": 34,
+      "matchedBenchmarkRuns": 3,
+      "ruleOnly": true,
+      "workingTreeGuardPassed": true
+    },
+    {
+      "project": "Heliolune",
+      "testsPassed": 188,
+      "frozen": true,
+      "zeroMatchSearchPassed": true
+    }
+  ],
+  "adaptiveAcceptance": {
+    "desktopMcpToolsProjected": true,
+    "modelInvokedDuringReleaseGate": false,
+    "deterministicRouteContextAcceptPassed": true,
+    "ticketConsumedAfterAcceptance": true,
+    "repeatedEvidenceFixture": {
+      "rawCommandOutputBytes": 7040,
+      "consecutiveDuplicatesCollapsed": 179,
+      "finalDiagnosticsRetained": true
+    }
+  },
+  "resolvedReleaseBlockers": [
+    "pathless search waiting on stdin",
+    "Windows process-name query mapping",
+    "ripgrep no-match misclassified as failure",
+    "adaptive routing contaminating rule-only benchmarks",
+    "duplicate Luna initialization evidence",
+    "accepted Luna tickets remaining readable"
+  ],
+  "result": "pass",
+  "claim": "No blocking usage issue was found in the tested release scope."
+}

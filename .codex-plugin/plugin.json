@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.1.0-alpha.1+codex.20260808091557",
+  "version": "0.1.0-alpha.1+codex.20260808091847",
   "description": "Independent model-bound semantic terminal with deterministic commands and persisted proof.",
   "author": {
     "name": "Sicheng Gu",

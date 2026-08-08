@@ -19,7 +19,7 @@ test('direct runner CLI emits exactly one compact line', () => {
 
 test('direct runner batches different observations into one process result', async () => {
   const result = await runDirectBatch({
-    requests: ['T|test|tests/firewall.test.mjs', 'T|git|status --short', 'T|search|-n HELIOTERM_LIMITS scripts/firewall.mjs'],
+    requests: ['T|test|tests/firewall.test.mjs', 'T|git|status --short', 'T|git|rev-parse HEAD'],
     cwd: process.cwd(),
   });
   assert.equal(result.pass, true, result.text);

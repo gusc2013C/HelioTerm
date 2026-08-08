@@ -1,4 +1,4 @@
 interface:
   display_name: "HelioTerm"
-  short_description: "Zero-model direct semantic terminal"
-  default_prompt: "Use $helioterm direct mode. On Windows, use system powershell.exe for its one local call."
+  short_description: "Fast zero-model batched terminal"
+  default_prompt: "Use $helioterm direct mode and batch all bounded observations into one local call."

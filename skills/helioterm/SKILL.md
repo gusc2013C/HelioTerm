@@ -1,14 +1,16 @@
 ---
 name: helioterm
-description: Run an independently usable zero-model direct semantic terminal for bounded test, build, git, search, benchmark, or process observations, with compact output and an optional configurable model-backed fallback when explicitly requested.
+description: Run an independently usable, fast zero-model terminal for bounded test, build, read-only git, search, benchmark, or process observations; use repeated requests to batch real-project checks, with a model-backed fallback only when explicitly requested.
 ---
 
 # HelioTerm
 
-Resolve the plugin root from this file. Combine compatible targets into one `T|operation|argument` line of at most 64 UTF-8 bytes; one `node --test` call should receive all fitting test files.
+Resolve `<root>` from this file. Ordinary mode uses no MCP or child model. Invoke once:
 
-For the ordinary path call `node <plugin-root>/scripts/direct-runner.mjs --request <line> --cwd <project-root>` exactly once. Require one compact result ending `model=0`. Do not run preflight on every request: the direct runner validates and fails closed, while preflight belongs to install, upgrade, and diagnostics.
+`node <root>/scripts/direct-runner.mjs --cwd <project> --request "T|operation|argument"`
 
-Only when the user explicitly requests a model-backed terminal, run preflight, require `[agents.helioterm]`, spawn the configured role with `fork_turns="none"`, batch the request, and inspect its persisted Native V2 proof. Never use a model merely to parse exit codes or test counts. HelioTerm does not edit, plan, review, or make engineering judgments.
+Combine compatible tests. For up to four different observations, repeat `--request` in that call. Each line is at most 64 UTF-8 bytes. Require one compact result ending `model=0`.
 
-Change the optional fallback model with `node scripts/configure-model.mjs --model <codex-model-id> --effort <effort> --write`, reinstall or refresh the plugin, and start a new task. Runtime rollout metadata, not the written id, proves a model-backed run.
+Skip preflight in ordinary mode; the runner validates the full batch before execution. Observe only—never edit, plan, review, or judge.
+
+For an explicit model-backed request only: run preflight, require `[agents.helioterm]`, spawn it with `fork_turns="none"`, batch work, and inspect Native V2 proof. Never use a model to parse output. Change that fallback with `node scripts/configure-model.mjs --model <id> --effort <effort> --write`, reinstall, and start a new task.

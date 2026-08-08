@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.1.0-alpha.1+codex.20260808085811",
+  "version": "0.1.0-alpha.1+codex.20260808091557",
   "description": "Independent model-bound semantic terminal with deterministic commands and persisted proof.",
   "author": {
     "name": "Sicheng Gu",
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "HelioTerm",
-    "shortDescription": "Deterministic semantic terminal with proof.",
-    "longDescription": "HelioTerm runs one reusable model-bound Codex leaf for bounded test, build, git, search, benchmark, and process observations, compresses noisy output, and verifies the persisted role, model, parent, commands, and budgets.",
+    "shortDescription": "Fast zero-model batched terminal.",
+    "longDescription": "HelioTerm batches bounded test, build, read-only Git, search, benchmark, and process observations into one deterministic local call with compact output; a verified model-backed leaf remains an explicit fallback.",
     "developerName": "Sicheng Gu",
     "category": "Productivity",
     "capabilities": [
@@ -29,7 +29,7 @@
     ],
     "websiteURL": "https://github.com/gusc2013C/HelioTerm",
     "defaultPrompt": [
-      "Use $helioterm direct mode. On Windows, use system powershell.exe for its one local call."
+      "Use $helioterm direct mode and batch all bounded observations into one local call."
     ]
   },
   "mcpServers": "./.mcp.json"

@@ -61,6 +61,54 @@
     { "operation": "search", "milliseconds": 37, "modelTokens": 0, "pass": true },
     { "operation": "git-status", "milliseconds": 44, "modelTokens": 0, "pass": true }
   ],
+  "speedAndTokenRound2": {
+    "workload": [
+      "T|test|tests/pricing.test.mjs tests/profiles.test.mjs",
+      "T|git|status --short",
+      "T|search|-n terminal plugins/heliolune/model-bindings.json"
+    ],
+    "runs": 5,
+    "beforeSeparateProcesses": {
+      "processes": 3,
+      "resultTurns": 3,
+      "minimumMilliseconds": 470.8,
+      "medianMilliseconds": 478.5,
+      "p95Milliseconds": 486.5
+    },
+    "afterOneBatch": {
+      "processes": 1,
+      "resultTurns": 1,
+      "minimumMilliseconds": 354.5,
+      "medianMilliseconds": 363.6,
+      "p95Milliseconds": 368.4,
+      "result": "OK|calls=3|ok=3|opfail=0|pass=23|testfail=0|raw=3500|ms=316|model=0"
+    },
+    "latencyImprovementPercent": {
+      "median": -24.01,
+      "p95": -24.28
+    },
+    "singleOperationGuardrail": {
+      "real23MedianBeforeMilliseconds": 325.7,
+      "real23MedianAfterMilliseconds": 324.2,
+      "coldGitMedianBeforeMilliseconds": 85.9,
+      "coldGitMedianAfterMilliseconds": 86.6
+    },
+    "tokenSurfaces": {
+      "heliotermModelTokens": 0,
+      "skillBytesBefore": 1409,
+      "skillBytesAfter": 1134,
+      "skillBytesImprovementPercent": -19.52,
+      "skillWordsBefore": 193,
+      "skillWordsAfter": 154,
+      "ownerTerminalResultTurnsImprovementPercent": -66.67
+    },
+    "quality": {
+      "tests": 23,
+      "failures": 0,
+      "batchValidatedBeforeExecution": true,
+      "mutatingGitRejectedBeforeExecution": true
+    }
+  },
   "decision": {
     "defaultMode": "direct",
     "modelBackedMode": "explicit-fallback",

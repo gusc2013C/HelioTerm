@@ -8,7 +8,8 @@ HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this reposito
 
 - Zero HelioTerm model tokens on the default direct path; owner intelligence is unchanged.
 - One optional persistent model-backed leaf, never a planner, writer, reviewer, or delegator.
-- Deterministic request mapping: `test`, `build`, `git`, `search`, `bench`, and `process` map to one known command form.
+- Deterministic request mapping: `test`, `build`, read-only `git`, `search`, `bench`, and `process` map to known command forms.
+- Up to four different observations share one Node startup and one owner tool turn; adjacent read-only observations run concurrently.
 - At most 8 requests/session, 4 command calls/request, 64 request bytes, and 256 response bytes.
 - Every final line carries truthful `calls=N` evidence.
 - Persisted proof checks the exact role, configured model and effort, Native V2 backend, parent, child-spawn count, commands, byte budgets, and evidence.
@@ -22,7 +23,11 @@ Run the ordinary direct path from this checkout with:
 node scripts/direct-runner.mjs --request "T|test|tests/firewall.test.mjs tests/mcp-server.test.mjs" --cwd .
 ```
 
-The result includes `model=0`. Compatible targets should be batched into one request so one process and one tool result cover the workload.
+The result includes `model=0`. Compatible targets should be combined in one request. Different observations can share the same process and tool result by repeating `--request`:
+
+```powershell
+node scripts/direct-runner.mjs --cwd . --request "T|test|tests/firewall.test.mjs" --request "T|git|status --short" --request "T|search|-n model=0 README.md"
+```
 
 ## Install from this checkout
 
@@ -60,3 +65,5 @@ The first real Codex Desktop acceptance reused one terminal for two exact test r
 A later matched three-way transport test passed the same 23 tests in every successful arm. Direct HelioTerm used 1.83% more total tokens than a plain Spark terminal; minimal MCP reduced model-visible command output by 98.01% and was 26.18% faster than direct HelioTerm, but used 20.97% more total tokens because deferred MCP discovery added cached tool context. MCP therefore remains opt-in. See [the three-way comparison](docs/AB3-TRANSPORT-COMPARISON.md).
 
 The optimized ordinary direct path later ran the same real 23-test Heliolune workload in 271 ms with zero HelioTerm model tokens. Its full Desktop task used 62,531 total tokens, 63.77% below the earlier model-backed HelioTerm workflow. See [the direct optimization report](docs/DIRECT-OPTIMIZATION.md).
+
+The next speed pass combined a real 23-test run, Git status, and configuration search into one process. Median wall time fell from 478.5 ms to 363.6 ms (24.01%), owner-facing terminal results fell from three to one, and the skill input shrank 19.52%; all 23 tests still passed and HelioTerm model usage remained zero.

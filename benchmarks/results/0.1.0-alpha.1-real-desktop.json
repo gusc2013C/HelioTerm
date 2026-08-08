@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "HELIOTERM_REAL_DESKTOP_BENCHMARK_V1",
+  "version": "0.1.0-alpha.1",
+  "date": "2026-08-08",
+  "pass": true,
+  "rootSessionId": "019fe063-1fa4-70e0-974b-cc85dba73f4f",
+  "terminal": {
+    "sessionId": "019fe063-9796-70b3-8352-1f63489fd26c",
+    "agentPath": "/root/helioterm_probe",
+    "role": "heliolune_helioterm",
+    "model": "gpt-5.3-codex-spark",
+    "effort": "medium",
+    "originator": "Codex Desktop",
+    "backend": "v2",
+    "durationMs": 16911,
+    "requestCount": 2,
+    "toolCallCount": 2,
+    "maxToolCallsPerRequest": 1,
+    "childSpawnCount": 0,
+    "rawOutputBytes": 1390,
+    "compressedBytes": 48,
+    "compressionRatio": 0.034532374100719423,
+    "usage": {
+      "inputTokens": 70228,
+      "cachedInputTokens": 56192,
+      "outputTokens": 1661,
+      "reasoningOutputTokens": 1492,
+      "totalTokens": 71889
+    }
+  },
+  "exchanges": [
+    {
+      "request": "T|test|tests/terminal-firewall.test.mjs",
+      "command": "node --test tests/terminal-firewall.test.mjs",
+      "response": "OK|calls=1|pass=4|fail=0",
+      "requestBytes": 39,
+      "responseBytes": 24,
+      "rawOutputBytes": 532,
+      "compressedBytes": 24
+    },
+    {
+      "request": "T|test|tests/native-terminal-proof.test.mjs",
+      "command": "node --test tests/native-terminal-proof.test.mjs",
+      "response": "OK|calls=1|pass=7|fail=0",
+      "requestBytes": 43,
+      "responseBytes": 24,
+      "rawOutputBytes": 858,
+      "compressedBytes": 24
+    }
+  ],
+  "independentVerification": {
+    "testsPassed": 14,
+    "testsFailed": 0,
+    "durationMs": 251.4585,
+    "diffCheck": "passed",
+    "failedProofChecks": []
+  },
+  "notes": [
+    "The real role name is the Heliolune-bundled alias; standalone HelioTerm uses the equivalent helioterm role.",
+    "No comparison to Heliolune 0.7 is included."
+  ]
+}

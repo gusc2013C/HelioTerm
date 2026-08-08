@@ -1,0 +1,10 @@
+[agents]
+enabled = true
+
+[agents.helioterm]
+description = "Independent model-bound HelioTerm leaf for deterministic commands and compact output."
+config_file = "../agents/helioterm.toml"
+
+[agents.helioterm_mcp]
+description = "Experimental shell-free MCP transport for HelioTerm A/B measurement."
+config_file = "../agents/helioterm-mcp.toml"

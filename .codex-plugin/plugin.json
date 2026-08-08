@@ -1,0 +1,36 @@
+{
+  "name": "helioterm",
+  "version": "0.1.0-alpha.1+codex.20260808083334",
+  "description": "Independent model-bound semantic terminal with deterministic commands and persisted proof.",
+  "author": {
+    "name": "Sicheng Gu",
+    "url": "https://github.com/gusc2013C"
+  },
+  "homepage": "https://github.com/gusc2013C/HelioTerm#readme",
+  "repository": "https://github.com/gusc2013C/HelioTerm",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "terminal",
+    "subagent",
+    "spark",
+    "token-compression"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HelioTerm",
+    "shortDescription": "Deterministic semantic terminal with proof.",
+    "longDescription": "HelioTerm runs one reusable model-bound Codex leaf for bounded test, build, git, search, benchmark, and process observations, compresses noisy output, and verifies the persisted role, model, parent, commands, and budgets.",
+    "developerName": "Sicheng Gu",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "Read"
+    ],
+    "websiteURL": "https://github.com/gusc2013C/HelioTerm",
+    "defaultPrompt": [
+      "Use $helioterm for one bounded terminal observation."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

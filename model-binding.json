@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "HELIOTERM_MODEL_BINDING_V1",
+  "agentType": "helioterm",
+  "mcpAgentType": "helioterm_mcp",
+  "model": "gpt-5.3-codex-spark",
+  "effort": "medium",
+  "configFile": "agents/helioterm.toml"
+}

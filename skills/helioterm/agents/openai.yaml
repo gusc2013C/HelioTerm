@@ -1,0 +1,4 @@
+interface:
+  display_name: "HelioTerm"
+  short_description: "Bound semantic terminal with compact proof"
+  default_prompt: "Use $helioterm for one bounded, persisted terminal observation."

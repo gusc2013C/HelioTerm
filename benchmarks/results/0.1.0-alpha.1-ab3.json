@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "HELIOTERM_AB3_V1",
+  "date": "2026-08-08",
+  "workload": {
+    "cwd": "D:\\code\\heliolune",
+    "command": "node --test tests/pricing.test.mjs tests/profiles.test.mjs",
+    "tests": 23,
+    "failures": 0,
+    "model": "gpt-5.3-codex-spark",
+    "effort": "medium",
+    "executionCalls": 1
+  },
+  "controlled": {
+    "plain": {
+      "sessionId": "019fe079-4de7-7fa1-a9d3-19fcbb9eb8eb",
+      "pass": true,
+      "wallTimeSeconds": 16.2865332,
+      "usage": {
+        "inputTokens": 30945,
+        "cachedInputTokens": 19200,
+        "uncachedInputTokens": 11745,
+        "outputTokens": 405,
+        "reasoningOutputTokens": 320,
+        "totalTokens": 31350
+      }
+    },
+    "direct": {
+      "sessionId": "019fe079-b69f-7982-b7c6-cb3ae764b0dc",
+      "pass": true,
+      "wallTimeSeconds": 22.8842652,
+      "usage": {
+        "inputTokens": 31189,
+        "cachedInputTokens": 18944,
+        "uncachedInputTokens": 12245,
+        "outputTokens": 736,
+        "reasoningOutputTokens": 654,
+        "totalTokens": 31925
+      },
+      "versusPlainPercent": {
+        "inputTokens": 0.79,
+        "totalTokens": 1.83,
+        "wallTime": 40.51
+      }
+    },
+    "mcpMinimal": {
+      "sessionId": "019fe07f-46b1-79d0-902a-51341bb1b9c8",
+      "pass": true,
+      "wallTimeSeconds": 16.8932349,
+      "rawOutputBytes": 2060,
+      "modelVisibleResultBytes": 41,
+      "modelVisibleOutputReductionPercent": 98.01,
+      "usage": {
+        "inputTokens": 37311,
+        "cachedInputTokens": 27904,
+        "uncachedInputTokens": 9407,
+        "outputTokens": 1308,
+        "reasoningOutputTokens": 1157,
+        "totalTokens": 38619
+      },
+      "versusDirectPercent": {
+        "inputTokens": 19.63,
+        "cachedInputTokens": 47.30,
+        "uncachedInputTokens": -23.18,
+        "outputTokens": 77.72,
+        "totalTokens": 20.97,
+        "wallTime": -26.18
+      }
+    }
+  },
+  "desktop": {
+    "plain": {
+      "threadId": "019fe074-8ac3-7893-86ac-3006eea398cf",
+      "pass": true,
+      "wallTimeSeconds": 12.057,
+      "usage": {
+        "inputTokens": 61615,
+        "cachedInputTokens": 33024,
+        "outputTokens": 210,
+        "reasoningOutputTokens": 37,
+        "totalTokens": 61825
+      }
+    },
+    "direct": {
+      "threadId": "019fe075-0595-7e31-9525-51546f136ffc",
+      "childSessionId": "019fe075-1eb0-7f02-8b95-27fc2d5e43ab",
+      "pass": true,
+      "wallTimeSeconds": 26.450,
+      "childDurationSeconds": 13.513,
+      "rawOutputBytes": 2381,
+      "compressedBytes": 216,
+      "rootUsage": {
+        "totalTokens": 101937
+      },
+      "childUsage": {
+        "totalTokens": 70655
+      },
+      "combinedTotalTokens": 172592,
+      "versusPlainPercent": {
+        "totalTokens": 179.16,
+        "wallTime": 119.37
+      }
+    },
+    "mcp": {
+      "threadId": "019fe075-9bed-7303-9f68-dc044767826a",
+      "childSessionId": "019fe075-b460-7c93-8213-e58b8b50b7a9",
+      "pass": false,
+      "failure": "Desktop V2 child lacked helioterm.run and used a forbidden exec_command fallback",
+      "combinedTotalTokens": 200531
+    }
+  },
+  "invalidOrDiagnosticSamples": [
+    {
+      "threadId": "019fe072-abd6-7d92-a44b-fbe15f934eca",
+      "reason": "default Desktop shell resolved to a WindowsApps pwsh alias and CreateProcessAsUserW returned access denied"
+    },
+    {
+      "sessionId": "019fe07a-3fbc-7e40-b894-f1d8485bb2bf",
+      "reason": "Spark did not trigger deferred MCP tool discovery and made no tool call"
+    }
+  ],
+  "terminalEvidence": [
+    {
+      "request": "T|test|tests/pricing.test.mjs",
+      "response": "OK|calls=1|node --test tests/pricing.test.mjs passed: tests 7, suites 0, pass 7, fail 0, duration 65.36ms.",
+      "commands": 1
+    },
+    {
+      "request": "T|test|tests/profiles.test.mjs",
+      "response": "OK|calls=1|node --test tests/profiles.test.mjs passed: tests 16, suites 0, pass 16, fail 0, duration 211.79ms.",
+      "commands": 1
+    }
+  ],
+  "decision": {
+    "defaultTransport": "direct",
+    "mcpStatus": "experimental",
+    "smallWorkloadRoute": "no-child",
+    "reason": "MCP reduces model-visible output but current deferred tool discovery increases total tokens; Desktop V2 does not project the local MCP tool to the custom child"
+  }
+}

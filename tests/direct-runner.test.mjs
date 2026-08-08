@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { runDirect, runDirectBatch } from '../scripts/direct-runner.mjs';
+import { evidenceSample, runCommand, semanticFacts } from '../scripts/kernel.mjs';
 
 test('direct runner executes a batched test request without a model or MCP', async () => {
   const result = await runDirect({ request: 'T|test|tests/firewall.test.mjs tests/mcp-server.test.mjs', cwd: process.cwd() });
   assert.equal(result.pass, true, result.text);
-  assert.match(result.text, /^OK\|calls=1\|exit=0\|(?:pass=\d+\|fail=0|lines=\d+)\|raw=\d+\|ms=\d+\|model=0$/u);
+  assert.match(result.text, /^OK\|calls=1\|(?:pass=\d+\|fail=0|lines=\d+)\|raw=\d+\|ms=\d+\|model=0$/u);
   assert.equal(result.command.file, process.execPath);
 });
 
@@ -23,8 +24,135 @@ test('direct runner batches different observations into one process result', asy
     cwd: process.cwd(),
   });
   assert.equal(result.pass, true, result.text);
-  assert.match(result.text, /^OK\|calls=3\|ok=3\|opfail=0\|pass=\d+\|testfail=0\|raw=\d+\|ms=\d+\|model=0$/u);
+  assert.match(result.text, /^OK\|calls=3\|pass=\d+\|ops=test,git\/\d+,git\/\d+/u);
+  assert.match(result.text, /\|model=0$/u);
+  assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
   assert.equal(result.commands.length, 3);
+});
+
+test('batch evidence gives each non-empty observation a bounded sample', async () => {
+  const result = await runDirectBatch({
+    requests: ['T|git|status --short', 'T|search|-n HelioTerm README.md', 'T|files|tests'],
+    cwd: process.cwd(),
+  });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /\|more=[23]\|/u);
+  assert.match(result.text, /(?:\|sample=|;)search:[^|;]+;files:[^|;]+/u);
+  assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
+});
+
+test('direct search returns bounded evidence instead of only a line count', async () => {
+  const result = await runDirect({ request: 'T|search|-n HelioTerm README.md', cwd: process.cwd() });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /\|more=1\|sample=[^|]*HelioTerm/u);
+  assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
+});
+
+test('a realistic multi-pattern search longer than 64 bytes stays compact', async () => {
+  const request = `T|search|-n "${'HelioTerm|'.repeat(10)}model=0" README.md`;
+  assert.ok(Buffer.byteLength(request, 'utf8') > 64);
+  const result = await runDirect({ request, cwd: process.cwd() });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /\|matches=\d+\|more=1\|sample=/u);
+  assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
+});
+
+test('semantic facts compress Git diff, status, search, files, and process output', () => {
+  const diff = 'diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -1 +1,2 @@\n-old\n+new\n+next\n';
+  assert.equal(semanticFacts(diff, 'git', { args: ['diff'] }), 'files=1|hunks=1|add=2|del=1');
+  assert.equal(semanticFacts(' M a.js\n?? b.js\n', 'git', { args: ['status'] }), 'changes=2');
+  assert.equal(semanticFacts('a:1:x\nb:2:y\n', 'search'), 'matches=2');
+  assert.equal(semanticFacts('a.js\nb.js\n', 'files'), 'files=2');
+  assert.equal(semanticFacts('header\nrow\n', 'process'), 'rows=2');
+  assert.equal(semanticFacts('', 'git', { args: ['diff', '--check'] }), 'issues=0');
+  assert.equal(semanticFacts('line one\nline two\n', 'git', { args: ['show', 'HEAD:file.js'] }), 'lines=2');
+  assert.equal(semanticFacts('{"pass":true,"failedChecks":[]}', 'bench', { args: ['preflight.mjs'] }), 'check=pass|failed=0');
+  assert.equal(semanticFacts('npm banner\n{"pass":true,"failedChecks":[]}\n', 'build', { args: ['preflight'] }), 'check=pass|failed=0');
+  assert.equal(semanticFacts('================ 12 passed, 1 skipped in 0.42s ================', 'pytest'), 'pass=12|fail=0');
+  assert.equal(semanticFacts('=========== 2 failed, 3 passed, 1 error in 0.42s ===========', 'pytest'), 'pass=3|fail=3');
+});
+
+test('git show source content is marked incomplete and keeps its first source lines', async () => {
+  const result = await runDirect({ request: 'T|git|show HEAD:README.md', cwd: process.cwd() });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /\|lines=\d+\|more=1\|sample=# HelioTerm/u);
+});
+
+test('a failed operation keeps failure evidence instead of successful prefix lines', async () => {
+  const result = await runDirect({ request: 'T|test|tests/does-not-exist.test.mjs', cwd: process.cwd() });
+  assert.equal(result.pass, false, result.text);
+  assert.match(result.text, /\|sample=.*(?:Could not find|not found|error)/iu);
+  assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
+});
+
+test('a failed batch prioritizes failure evidence over successful observations', async () => {
+  const result = await runDirectBatch({
+    requests: ['T|test|tests/does-not-exist.test.mjs', 'T|git|status --short'],
+    cwd: process.cwd(),
+  });
+  assert.equal(result.pass, false, result.text);
+  assert.match(result.text, /\|sample=test:.*(?:Could not find|not found|error)/iu);
+  assert.doesNotMatch(result.text, /;git:/u);
+  assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
+});
+
+test('a process-level failure with empty stderr retains the exec error', async () => {
+  const result = await runCommand({
+    command: { file: 'helioterm-command-that-does-not-exist', args: [] },
+    cwd: process.cwd(),
+    operation: 'process',
+  });
+  assert.match(result.text, /^FAIL\|calls=1\|exit=1\|/u);
+  assert.match(result.text, /\|sample=.*(?:ENOENT|not found|cannot find)/iu);
+});
+
+test('a failed operation prioritizes stderr over successful-looking stdout', async () => {
+  const result = await runCommand({
+    command: { file: process.execPath, args: ['-e', 'process.stdout.write("match one\\nmatch two\\n"); process.stderr.write("rg: missing path error\\n"); process.exit(2)'] },
+    cwd: process.cwd(),
+    operation: 'search',
+  });
+  assert.match(result.text, /^FAIL\|calls=1\|exit=2\|matches=3\|more=1\|sample=rg: missing path error/u);
+});
+
+test('successful process inventory suppresses locale-dependent text but signals more', async () => {
+  const result = await runCommand({
+    command: { file: process.execPath, args: ['-e', 'console.log("localized process row")'] },
+    cwd: process.cwd(),
+    operation: 'process',
+  });
+  assert.match(result.text, /^OK\|calls=1\|rows=1\|more=1\|raw=\d+$/u);
+  assert.doesNotMatch(result.text, /localized/u);
+});
+
+test('a passing JSON check is complete without a redundant sample', async () => {
+  const result = await runCommand({
+    command: { file: process.execPath, args: ['-e', 'console.log(JSON.stringify({pass:true,failedChecks:[]}))'] },
+    cwd: process.cwd(),
+    operation: 'bench',
+  });
+  assert.match(result.text, /^OK\|calls=1\|check=pass\|failed=0\|raw=\d+$/u);
+});
+
+test('failure evidence skips successful TAP prefixes, including ANSI output', () => {
+  const sample = evidenceSample('✔ passed first\n\u001B[31m✖ actual failure\u001B[0m\nAssertionError [ERR_ASSERTION]: mismatch', 104, true);
+  assert.equal(sample.startsWith('✖ actual failure'), true, sample);
+  assert.doesNotMatch(sample, /passed first/u);
+});
+
+test('evidence removes repeated diagnostics and normalizes the workspace path', () => {
+  const cwd = process.platform === 'win32' ? String.raw`D:\work\demo` : '/work/demo';
+  const file = process.platform === 'win32' ? String.raw`D:\work\demo\src\app.py` : '/work/demo/src/app.py';
+  const expected = process.platform === 'win32' ? String.raw`ERROR: .\src\app.py:10;AssertionError: mismatch` : 'ERROR: ./src/app.py:10;AssertionError: mismatch';
+  const sample = evidenceSample(`ERROR: ${file}:10\nERROR: ${file}:10\nAssertionError: mismatch`, 160, true, cwd);
+  assert.equal(sample, expected);
+});
+
+test('files lists one repo-relative directory without a shell', async () => {
+  const result = await runDirect({ request: 'T|files|tests', cwd: process.cwd() });
+  assert.equal(result.pass, true, result.text);
+  assert.deepEqual(result.command, { file: 'rg', args: ['--files', 'tests'] });
+  assert.match(result.text, /\|sample=tests[\\/]direct-runner\.test\.mjs/u);
 });
 
 test('direct runner validates a whole batch before executing anything', async () => {

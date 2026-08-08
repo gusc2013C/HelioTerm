@@ -15,6 +15,18 @@ test('standalone preflight passes and exposes the active binding', () => {
   assert.equal(payload.binding.effort, 'high');
 });
 
+test('preflight fails closed when required terminal dependencies are unavailable', () => {
+  const run = spawnSync(process.execPath, ['scripts/preflight.mjs', '--compact'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: { ...process.env, PATH: '' },
+  });
+  assert.equal(run.status, 1, run.stderr || run.stdout);
+  const result = JSON.parse(run.stdout);
+  assert.equal(result.pass, false);
+  assert.deepEqual(result.failedChecks.filter((name) => name.endsWith('-available')).sort(), ['git-available', 'ripgrep-available']);
+});
+
 test('all model-backed standalone terminal roles use Luna high', () => {
   const binding = JSON.parse(readFileSync('model-binding.json', 'utf8'));
   assert.equal(binding.model, 'gpt-5.6-luna');

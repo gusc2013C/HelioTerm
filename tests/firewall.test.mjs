@@ -15,6 +15,14 @@ test('rejects malformed, oversized, unsupported, and multiline requests', () => 
   assert.equal(validateRequest('T|write|x').pass, false);
   assert.equal(validateRequest(`T|test|${'x'.repeat(HELIOTERM_LIMITS.maxRequestBytes)}`).pass, false);
   assert.equal(validateRequest('T|test|a\nb').pass, false);
+  assert.equal(validateRequest(`T|search|-n ${'HelioTerm|'.repeat(12)} README.md`).pass, true);
+});
+
+test('files accepts only one repo-relative directory', () => {
+  assert.equal(validateRequest('T|files|tests').pass, true);
+  for (const argument of ['', ' ', '/tmp', String.raw`\\server\share`, String.raw`C:\repo`, 'C:repo', '../src', 'src/../other', String.raw`src\..\other`, 'src other', '-hidden']) {
+    assert.equal(validateRequest(`T|files|${argument}`).pass, false, argument);
+  }
 });
 
 test('rejects verbose responses and dishonest or excessive calls', () => {

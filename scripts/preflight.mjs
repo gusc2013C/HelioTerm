@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,9 +11,12 @@ const binding = existsSync(bindingPath) ? JSON.parse(readFileSync(bindingPath, '
 const config = existsSync(resolve(root, '.codex', 'config.toml')) ? readFileSync(resolve(root, '.codex', 'config.toml'), 'utf8') : '';
 const role = existsSync(resolve(root, 'agents', 'helioterm.toml')) ? readFileSync(resolve(root, 'agents', 'helioterm.toml'), 'utf8') : '';
 const mcpRole = existsSync(resolve(root, 'agents', 'helioterm-mcp.toml')) ? readFileSync(resolve(root, 'agents', 'helioterm-mcp.toml'), 'utf8') : '';
+const commandAvailable = (file) => spawnSync(file, ['--version'], { encoding: 'utf8', windowsHide: true }).status === 0;
 const files = ['.codex-plugin/plugin.json', '.mcp.json', 'agents/helioterm-mcp.toml', 'skills/helioterm/SKILL.md', 'scripts/direct-runner.mjs', 'scripts/firewall.mjs', 'scripts/inspect-proof.mjs', 'scripts/find-rollout.mjs', 'scripts/install-project.mjs', 'scripts/mcp-server.mjs'];
 const checks = [
   ...files.map((path) => ({ name: `${path}-present`, pass: existsSync(resolve(root, path)) })),
+  { name: 'git-available', pass: commandAvailable('git') },
+  { name: 'ripgrep-available', pass: commandAvailable('rg') },
   { name: 'binding-schema', pass: binding?.schemaVersion === 'HELIOTERM_MODEL_BINDING_V1' },
   { name: 'direct-default', pass: binding?.defaultMode === 'direct' && binding?.directRunner === 'scripts/direct-runner.mjs' },
   { name: 'binding-registered', pass: config.includes(`[agents.${binding?.agentType ?? ''}]`) && config.includes('../agents/helioterm.toml') },
@@ -23,7 +27,7 @@ const checks = [
   { name: 'mcp-binding-effort', pass: typeof binding?.effort === 'string' && mcpRole.includes(`model_reasoning_effort = "${binding.effort}"`) },
   { name: 'identity-marker', pass: role.includes('HELIOTERM_ROLE_APPLIED') },
   { name: 'leaf-invariant', pass: role.includes('delegate') && role.includes('model-backed HelioTerm fallback') },
-  { name: 'deterministic-map', pass: role.includes('map test=`node --test`') && role.includes('Without discovery') },
+  { name: 'deterministic-map', pass: role.includes('map test=`node --test`') && role.includes('pytest=`py -m pytest`') && role.includes('files=`rg --files`') && role.includes('Without discovery') },
 ];
 const result = { schemaVersion: 'HELIOTERM_PREFLIGHT_V1', pass: checks.every((entry) => entry.pass), binding, checks };
 const compact = process.argv.includes('--compact');

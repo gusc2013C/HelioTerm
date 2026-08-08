@@ -11,6 +11,19 @@ test('standalone preflight passes and exposes the active binding', () => {
   const payload = JSON.parse(run.stdout);
   assert.equal(payload.pass, true);
   assert.equal(payload.binding.agentType, 'helioterm');
+  assert.equal(payload.binding.model, 'gpt-5.6-luna');
+  assert.equal(payload.binding.effort, 'high');
+});
+
+test('all model-backed standalone terminal roles use Luna high', () => {
+  const binding = JSON.parse(readFileSync('model-binding.json', 'utf8'));
+  assert.equal(binding.model, 'gpt-5.6-luna');
+  assert.equal(binding.effort, 'high');
+  for (const roleName of ['helioterm.toml', 'helioterm-mcp.toml']) {
+    const role = readFileSync(resolve('agents', roleName), 'utf8');
+    assert.match(role, /model = "gpt-5\.6-luna"/u);
+    assert.doesNotMatch(role, /gpt-5\.3-codex-spark/u);
+  }
 });
 
 test('configurator inspects without writes and fails closed on unsafe requests', () => {

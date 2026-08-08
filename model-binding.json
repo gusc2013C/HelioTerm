@@ -4,7 +4,7 @@
   "directRunner": "scripts/direct-runner.mjs",
   "agentType": "helioterm",
   "mcpAgentType": "helioterm_mcp",
-  "model": "gpt-5.3-codex-spark",
-  "effort": "medium",
+  "model": "gpt-5.6-luna",
+  "effort": "high",
   "configFile": "agents/helioterm.toml"
 }

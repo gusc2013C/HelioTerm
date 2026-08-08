@@ -15,7 +15,7 @@ HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this reposito
 - Persisted proof checks the exact role, configured model and effort, Native V2 backend, parent, child-spawn count, commands, byte budgets, and evidence.
 - The terminal model can be changed to another model available to the user's Codex account. Availability is accepted only after a real Desktop session proves the configured model; the config file alone is not proof.
 
-The zero-model `direct-runner.mjs` path is the default. The `helioterm` role is the optional model-backed fallback. The shell-free `helioterm_mcp` role is experimental: it removes shell-path construction and compresses output before the model sees it, but current Codex tool discovery can cost more tokens than it saves on small commands. It fails closed with `FAIL|calls=0|mcp-unavailable` when the MCP tool is not projected into a session.
+The zero-model `direct-runner.mjs` path is the default. The reusable Luna/high `helioterm` role is the optional model-backed fallback; Spark is not used by the active default or fallback. The shell-free `helioterm_mcp` role is experimental: it removes shell-path construction and compresses output before the model sees it, but current Codex tool discovery can cost more tokens than it saves on small commands. It fails closed with `FAIL|calls=0|mcp-unavailable` when the MCP tool is not projected into a session. See [Luna fallback and bounded reuse](docs/LUNA-FALLBACK-AND-REUSE.md) for the routing and session-lifetime policy.
 
 Run the ordinary direct path from this checkout with:
 
@@ -42,7 +42,7 @@ The project installer is idempotent and refuses to overwrite a conflicting `heli
 ## Change the model binding
 
 ```powershell
-node scripts/configure-model.mjs --model gpt-5.3-codex-spark --effort medium --write
+node scripts/configure-model.mjs --model gpt-5.6-luna --effort high --write
 node scripts/install-project.mjs --project <your-project> --write
 npm run preflight
 ```

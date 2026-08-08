@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.1.0-alpha.1+codex.20260808091847",
+  "version": "0.1.0-alpha.1+codex.20260808095139",
   "description": "Independent model-bound semantic terminal with deterministic commands and persisted proof.",
   "author": {
     "name": "Sicheng Gu",
@@ -13,14 +13,14 @@
     "codex",
     "terminal",
     "subagent",
-    "spark",
+    "luna",
     "token-compression"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "HelioTerm",
     "shortDescription": "Fast zero-model batched terminal.",
-    "longDescription": "HelioTerm batches bounded test, build, read-only Git, search, benchmark, and process observations into one deterministic local call with compact output; a verified model-backed leaf remains an explicit fallback.",
+    "longDescription": "HelioTerm batches bounded test, build, read-only Git, search, benchmark, and process observations into one deterministic local call with compact output; a reusable Luna leaf is the explicit model-backed fallback.",
     "developerName": "Sicheng Gu",
     "category": "Productivity",
     "capabilities": [

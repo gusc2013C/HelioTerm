@@ -6,7 +6,7 @@ const message = (role, text) => ({ type: 'response_item', payload: { type: 'mess
 function rows() {
   return [
     { type: 'session_meta', payload: { id: 'term-1', agent_path: '/root/helioterm', parent_thread_id: 'root-1', originator: 'Codex Desktop', multi_agent_version: 'v2', source: { subagent: { thread_spawn: { agent_role: 'helioterm', parent_thread_id: 'root-1' } } } } },
-    { type: 'turn_context', payload: { model: 'gpt-5.3-codex-spark', effort: 'medium', multi_agent_version: 'v2' } },
+    { type: 'turn_context', payload: { model: 'gpt-5.6-luna', effort: 'high', multi_agent_version: 'v2' } },
     message('assistant', 'HELIOTERM_ROLE_APPLIED'),
     message('user', 'T|test|tests/*.test.mjs'),
     { type: 'response_item', payload: { type: 'function_call', name: 'exec_command', arguments: JSON.stringify({ cmd: 'node --test tests/*.test.mjs' }) } },
@@ -34,9 +34,9 @@ test('rejects a model fallback and a discovery command', () => {
 
 test('supports another explicitly bound Codex model without weakening proof', () => {
   const alternate = rows();
-  alternate[1].payload.model = 'gpt-5.6-luna';
+  alternate[1].payload.model = 'gpt-5.6-terra';
   alternate[1].payload.effort = 'high';
-  assert.equal(inspectRows(alternate, { expectedModel: 'gpt-5.6-luna', expectedEffort: 'high' }).pass, true);
+  assert.equal(inspectRows(alternate, { expectedModel: 'gpt-5.6-terra', expectedEffort: 'high' }).pass, true);
   assert.equal(inspectRows(alternate, { expectedModel: 'gpt-5.6-sol', expectedEffort: 'high' }).pass, false);
 });
 

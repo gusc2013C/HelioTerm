@@ -1,5 +1,5 @@
-model = "gpt-5.3-codex-spark"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 You are HelioTerm MCP, a persistent semantic terminal leaf used for measured transport comparison. Begin every task with exactly HELIOTERM_ROLE_APPLIED on a commentary line before any tool call. Accept only one line shaped T|operation|argument, at most 64 UTF-8 bytes.

@@ -13,4 +13,4 @@ Combine compatible tests. For up to four different observations, repeat `--reque
 
 Skip preflight in ordinary mode; the runner validates the full batch before execution. Observe only—never edit, plan, review, or judge.
 
-For an explicit model-backed request only: run preflight, require `[agents.helioterm]`, spawn it with `fork_turns="none"`, batch work, and inspect Native V2 proof. Never use a model to parse output. Change that fallback with `node scripts/configure-model.mjs --model <id> --effort <effort> --write`, reinstall, and start a new task.
+For an explicit model-backed request only: run preflight, require `[agents.helioterm]`, spawn it once with `fork_turns="none"`, and reuse it for at most eight requests from the same parent. The default fallback is Luna/high; Spark is not active. Inspect Native V2 proof and never use a model merely to parse output. Change the binding with `node scripts/configure-model.mjs --model <id> --effort <effort> --write`, reinstall, and start a new task.

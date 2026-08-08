@@ -1,6 +1,6 @@
 # Ordinary HelioTerm direct optimization
 
-On 2026-08-08 the ordinary HelioTerm path was changed from a model-backed terminal child to a deterministic direct runner. The runner uses `execFile`, never a shell or MCP transport, batches compatible targets into one request, removes nested Node test context, compresses output before returning it, and reports `model=0`. The configured Spark role remains available only as an explicit semantic fallback. Sol/Luna owner models and reasoning effort are unchanged.
+On 2026-08-08 the ordinary HelioTerm path was changed from a model-backed terminal child to a deterministic direct runner. The runner uses `execFile`, never a shell or MCP transport, batches compatible targets into one request, removes nested Node test context, compresses output before returning it, and reports `model=0`. The explicit semantic fallback now uses Luna/high; Spark is not an active binding. Sol/Luna owner models and reasoning effort are unchanged.
 
 The matched real workload was `node --test tests/pricing.test.mjs tests/profiles.test.mjs` in the Heliolune repository. Every accepted arm passed 23/23 tests.
 

@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const VERSION = '0.1.0-alpha.1';
 const OPERATIONS = new Set(['test', 'build', 'git', 'search', 'bench', 'process']);
+const READ_ONLY_GIT = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'grep', 'describe']);
 export const TOOL = {
   name: 'run',
   title: 'Run one HelioTerm operation',
@@ -49,7 +50,10 @@ export function commandFor(operation, argument) {
   if (operation === 'test') return { file: process.execPath, args: ['--test', ...args] };
   if (operation === 'bench') return { file: process.execPath, args };
   if (operation === 'build') return { file: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['run', ...args] };
-  if (operation === 'git') return { file: 'git', args };
+  if (operation === 'git') {
+    if (!READ_ONLY_GIT.has(args[0])) throw new Error('Unsupported mutating git operation');
+    return { file: 'git', args };
+  }
   if (operation === 'search') return { file: 'rg', args };
   return { file: process.platform === 'win32' ? 'tasklist.exe' : 'ps', args };
 }
@@ -68,7 +72,9 @@ export async function runOperation({ operation, argument, cwd }) {
   if (typeof cwd !== 'string' || !statSync(cwd).isDirectory()) throw new Error('cwd must be an existing directory');
   const command = commandFor(operation, argument);
   try {
-    const { stdout, stderr } = await execFileAsync(command.file, command.args, { cwd, windowsHide: true, timeout: 240000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
+    const childEnvironment = { ...process.env };
+    delete childEnvironment.NODE_TEST_CONTEXT;
+    const { stdout, stderr } = await execFileAsync(command.file, command.args, { cwd, env: childEnvironment, windowsHide: true, timeout: 240000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
     return { text: compact({ exitCode: 0, stdout, stderr }), command };
   } catch (error) {
     const exitCode = Number.isInteger(error.code) ? error.code : 1;

@@ -1,5 +1,7 @@
 {
   "schemaVersion": "HELIOTERM_MODEL_BINDING_V1",
+  "defaultMode": "direct",
+  "directRunner": "scripts/direct-runner.mjs",
   "agentType": "helioterm",
   "mcpAgentType": "helioterm_mcp",
   "model": "gpt-5.3-codex-spark",

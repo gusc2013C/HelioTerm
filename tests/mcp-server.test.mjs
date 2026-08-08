@@ -10,6 +10,8 @@ test('MCP tool schema is narrow and shell-free command mapping is deterministic'
   assert.equal(command.file, process.execPath);
   assert.deepEqual(command.args, ['--test', 'tests/firewall.test.mjs']);
   assert.deepEqual(parseArguments('file "two words" & whoami'), ['file', 'two words', '&', 'whoami']);
+  assert.deepEqual(commandFor('git', 'status --short'), { file: 'git', args: ['status', '--short'] });
+  assert.throws(() => commandFor('git', 'reset --hard'), /mutating git/u);
 });
 
 test('MCP run executes one test without a shell and returns compact evidence', async () => {

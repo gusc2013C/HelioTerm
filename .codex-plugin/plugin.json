@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.1.0-alpha.1+codex.20260808083334",
+  "version": "0.1.0-alpha.1+codex.20260808085811",
   "description": "Independent model-bound semantic terminal with deterministic commands and persisted proof.",
   "author": {
     "name": "Sicheng Gu",
@@ -29,7 +29,7 @@
     ],
     "websiteURL": "https://github.com/gusc2013C/HelioTerm",
     "defaultPrompt": [
-      "Use $helioterm for one bounded terminal observation."
+      "Use $helioterm direct mode. On Windows, use system powershell.exe for its one local call."
     ]
   },
   "mcpServers": "./.mcp.json"

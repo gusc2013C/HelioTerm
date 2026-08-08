@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "HELIOTERM_DIRECT_OPTIMIZATION_V1",
+  "date": "2026-08-08",
+  "workload": {
+    "cwd": "D:\\code\\heliolune",
+    "request": "T|test|tests/pricing.test.mjs tests/profiles.test.mjs",
+    "tests": 23,
+    "failures": 0
+  },
+  "baselineModelBacked": {
+    "rootThreadId": "019fe075-0595-7e31-9525-51546f136ffc",
+    "childSessionId": "019fe075-1eb0-7f02-8b95-27fc2d5e43ab",
+    "rootTotalTokens": 101937,
+    "childTotalTokens": 70655,
+    "combinedTotalTokens": 172592,
+    "endToEndSeconds": 26.450,
+    "childSeconds": 13.513,
+    "pass": true
+  },
+  "firstDirectDiagnostic": {
+    "threadId": "019fe090-65f1-7aa3-a1e3-7e276eaf9421",
+    "rootToolCalls": 4,
+    "heliotermModelTokens": 0,
+    "totalTokens": 105883,
+    "inputTokens": 105038,
+    "cachedInputTokens": 87808,
+    "outputTokens": 845,
+    "reasoningOutputTokens": 106,
+    "endToEndSeconds": 27.202,
+    "coreMilliseconds": 281,
+    "pass": true
+  },
+  "optimizedDirect": {
+    "threadId": "019fe093-3588-7442-ab36-d58704f3bfcb",
+    "rootModel": "gpt-5.6-sol",
+    "rootEffort": "medium",
+    "rootToolCalls": 2,
+    "directRunnerCalls": 1,
+    "heliotermModelTokens": 0,
+    "totalTokens": 62531,
+    "inputTokens": 61949,
+    "cachedInputTokens": 27136,
+    "outputTokens": 582,
+    "reasoningOutputTokens": 149,
+    "endToEndSeconds": 24.721,
+    "coreMilliseconds": 271,
+    "rawOutputBytes": 2058,
+    "result": "OK|calls=1|exit=0|pass=23|fail=0|raw=2058|ms=271|model=0",
+    "pass": true
+  },
+  "improvementPercent": {
+    "firstDiagnosticToOptimizedTotalTokens": -40.94,
+    "firstDiagnosticToOptimizedEndToEnd": -9.12,
+    "modelBackedToOptimizedTotalTokens": -63.77,
+    "modelBackedToOptimizedEndToEnd": -6.54,
+    "modelBackedChildToDirectCoreLatency": -97.99,
+    "heliotermModelTokens": -100.0
+  },
+  "additionalRealOperations": [
+    { "operation": "test", "milliseconds": 277, "modelTokens": 0, "pass": true },
+    { "operation": "search", "milliseconds": 37, "modelTokens": 0, "pass": true },
+    { "operation": "git-status", "milliseconds": 44, "modelTokens": 0, "pass": true }
+  ],
+  "decision": {
+    "defaultMode": "direct",
+    "modelBackedMode": "explicit-fallback",
+    "mcpMode": "experimental"
+  }
+}

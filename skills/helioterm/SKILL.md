@@ -1,15 +1,14 @@
 ---
 name: helioterm
-description: Run one independently usable, model-bound semantic terminal session with deterministic commands, strict request/response/tool budgets, compact noisy-output compression, and persisted Native V2 proof. Use for bounded test, build, git, search, benchmark, or process observations that do not require source reasoning or edits.
+description: Run an independently usable zero-model direct semantic terminal for bounded test, build, git, search, benchmark, or process observations, with compact output and an optional configurable model-backed fallback when explicitly requested.
 ---
 
 # HelioTerm
 
-1. Resolve this skill's plugin root from the loaded `SKILL.md` path. Run its `scripts/preflight.mjs --compact` by absolute path and require a pass.
-2. Require the current project to have `[agents.helioterm]`. If it is missing, explain that setup mutates `.codex/config.toml` and ask the user to run `<plugin-root>/scripts/install-project.mjs --project <project> --write`, then start a new task.
-3. Read `model-binding.json`; spawn its `agentType` with `fork_turns="none"` and no model or effort override.
-4. Send exactly one `T|operation|argument` line, at most 64 UTF-8 bytes. Reuse the same child with `followup_task`; never replace a failed session. Use at most eight requests.
-5. Require a final line at most 256 bytes with truthful `calls=N`. The child is a leaf semantic terminal and cannot edit, plan, review, reason about source, or delegate.
-6. Locate the rollout by canonical agent path, configured role, and parent. Run the plugin root's `scripts/inspect-proof.mjs` with the configured role/model/effort and require all checks to pass.
+Resolve the plugin root from this file. Combine compatible targets into one `T|operation|argument` line of at most 64 UTF-8 bytes; one `node --test` call should receive all fitting test files.
 
-Change the model with `node scripts/configure-model.mjs --model <codex-model-id> --effort <effort> --write`, reinstall or refresh the plugin, and start a new task. Runtime rollout metadata, not the written id, proves the model.
+For the ordinary path call `node <plugin-root>/scripts/direct-runner.mjs --request <line> --cwd <project-root>` exactly once. Require one compact result ending `model=0`. Do not run preflight on every request: the direct runner validates and fails closed, while preflight belongs to install, upgrade, and diagnostics.
+
+Only when the user explicitly requests a model-backed terminal, run preflight, require `[agents.helioterm]`, spawn the configured role with `fork_turns="none"`, batch the request, and inspect its persisted Native V2 proof. Never use a model merely to parse exit codes or test counts. HelioTerm does not edit, plan, review, or make engineering judgments.
+
+Change the optional fallback model with `node scripts/configure-model.mjs --model <codex-model-id> --effort <effort> --write`, reinstall or refresh the plugin, and start a new task. Runtime rollout metadata, not the written id, proves a model-backed run.

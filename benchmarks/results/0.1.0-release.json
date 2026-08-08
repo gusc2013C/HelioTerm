@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "HELIOTERM_RELEASE_EVIDENCE_V1",
+  "version": "0.1.0",
+  "date": "2026-08-08",
+  "pass": true,
+  "scope": "Compress bounded terminal observations without replacing owner-model code reading, editing, review, or judgment.",
+  "constraints": {
+    "helioluneFrozen": true,
+    "defaultMode": "direct",
+    "heliotermModelTokens": 0,
+    "ownerModelChanged": false,
+    "responseBodyLimitBytes": 256
+  },
+  "methods": [
+    {
+      "name": "semantic aggregation",
+      "result": "Eight operation classes expose bounded decision-relevant facts instead of raw logs."
+    },
+    {
+      "name": "successful-default elision",
+      "result": "Fields implied by OK are omitted; failures retain exit and operation-health evidence."
+    },
+    {
+      "name": "duplicate diagnostic removal",
+      "result": "Repeated normalized evidence lines appear once, preserving budget for distinct failures."
+    },
+    {
+      "name": "workspace path normalization",
+      "result": "The current workspace prefix becomes a relative dot in bounded evidence."
+    },
+    {
+      "name": "adaptive disclosure",
+      "result": "more=1 distinguishes valid partial evidence from a complete source or diff."
+    },
+    {
+      "name": "batched observation",
+      "result": "Up to four operations share one wrapper startup and owner tool response."
+    }
+  ],
+  "exactOwnerTokenEvidence": {
+    "source": "0.1.0-alpha.1-sol-terminal-isolation.json",
+    "plainInputTokens": 33088,
+    "compactInputTokens": 20079,
+    "inputTokensSaved": 13009,
+    "inputTokenReductionPercent": 39.31636847195358,
+    "note": "This paired Sol ingestion experiment predates successful-default elision and is retained as the exact model-token measurement. New release deltas below are end-to-end bytes, not estimated tokens."
+  },
+  "realProjects": {
+    "method": "Seven alternating end-to-end runs after warm-up; pytest, Git status, search, and file discovery are identical between plain and HelioTerm arms.",
+    "TactileGear": {
+      "tests": 34,
+      "pass": true,
+      "workingTreeUnchanged": true,
+      "plainOutputBytes": 34565,
+      "previousCompactBytesIncludingCliNewline": 257,
+      "releaseCompactBytesIncludingCliNewline": 223,
+      "additionalCompactReductionPercent": 13.229571984435796,
+      "rawOutputReductionPercent": 99.35483870967742,
+      "plainMedianMilliseconds": 502.613,
+      "heliotermMedianMilliseconds": 531.4148,
+      "latencyDifferenceMilliseconds": 28.8018,
+      "latencyDifferencePercent": 5.730412862381318
+    },
+    "diagnosticBackend": {
+      "tests": 12,
+      "pass": true,
+      "workingTreeUnchanged": true,
+      "plainOutputBytes": 3234,
+      "previousCompactBytesIncludingCliNewline": 216,
+      "releaseCompactBytesIncludingCliNewline": 179,
+      "additionalCompactReductionPercent": 17.129629629629626,
+      "rawOutputReductionPercent": 94.46505875077304,
+      "plainMedianMilliseconds": 583.0432,
+      "heliotermMedianMilliseconds": 610.236,
+      "latencyDifferenceMilliseconds": 27.1928,
+      "latencyDifferencePercent": 4.663942568921109
+    }
+  },
+  "diagnosticCompression": {
+    "rawBytes": 202,
+    "sampleBudgetBytes": 104,
+    "legacySampleBytes": 104,
+    "releaseSampleBytes": 86,
+    "distinctUsefulDiagnosticsBefore": 1,
+    "distinctUsefulDiagnosticsAfter": 3,
+    "pass": true
+  },
+  "quality": {
+    "unitAndIntegrationTests": 38,
+    "testFailures": 0,
+    "preflight": true,
+    "skillValidation": true,
+    "releaseJsonValidation": true,
+    "realProjectTests": 46,
+    "realProjectFailures": 0
+  },
+  "boundary": "The local wrapper still adds a measured 27-29 ms median to these already hand-batched workloads. HelioTerm saves owner context and tool turns; it does not claim that a fresh Node process makes tiny commands intrinsically faster."
+}

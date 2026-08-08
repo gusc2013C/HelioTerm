@@ -23,7 +23,7 @@ const checks = [
   { name: 'mcp-binding-effort', pass: typeof binding?.effort === 'string' && mcpRole.includes(`model_reasoning_effort = "${binding.effort}"`) },
   { name: 'identity-marker', pass: role.includes('HELIOTERM_ROLE_APPLIED') },
   { name: 'leaf-invariant', pass: role.includes('delegate') && role.includes('model-backed HelioTerm fallback') },
-  { name: 'deterministic-map', pass: role.includes('map test=`node --test`') && role.includes('Without discovery') },
+  { name: 'deterministic-map', pass: role.includes('map test=`node --test`') && role.includes('pytest=`py -m pytest`') && role.includes('files=`rg --files`') && role.includes('Without discovery') },
 ];
 const result = { schemaVersion: 'HELIOTERM_PREFLIGHT_V1', pass: checks.every((entry) => entry.pass), binding, checks };
 const compact = process.argv.includes('--compact');

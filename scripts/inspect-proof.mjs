@@ -31,7 +31,7 @@ function expectedCommand(request, transport) {
   const match = /^T\|([a-z]+)\|(.+)$/u.exec(request ?? '');
   if (!match) return null;
   if (transport === 'mcp') return `mcp:${match[1]}|${match[2]}`;
-  const prefix = { test: 'node --test ', build: 'npm run ', git: 'git ', search: 'rg ', bench: 'node ', process: 'tasklist ' }[match[1]];
+  const prefix = { test: 'node --test ', pytest: 'py -m pytest -p no:cacheprovider ', build: 'npm run ', git: 'git ', search: 'rg ', files: 'rg --files ', bench: 'node ', process: 'tasklist ' }[match[1]];
   return prefix ? `${prefix}${match[2]}` : null;
 }
 

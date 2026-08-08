@@ -6,7 +6,7 @@ import { OPERATIONS, commandFor, parseArguments, runOperation } from './kernel.m
 
 export { commandFor, parseArguments, runOperation } from './kernel.mjs';
 
-const VERSION = '0.1.0-alpha.1';
+const VERSION = '0.1.0';
 export const TOOL = {
   name: 'run',
   title: 'Run one HelioTerm operation',

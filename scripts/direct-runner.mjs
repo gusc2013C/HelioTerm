@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { HELIOTERM_LIMITS, validateRequest } from './firewall.mjs';
 import { assertWorkingDirectory, commandFor, runCommand } from './kernel.mjs';
 
-const PARALLEL_OBSERVATIONS = new Set(['git', 'search', 'process']);
+const PARALLEL_OBSERVATIONS = new Set(['git', 'search', 'files', 'process']);
 
 function option(argv, name) {
   const index = argv.indexOf(name);
@@ -29,17 +29,46 @@ function numberFrom(text, field) {
   return value === undefined ? null : Number(value);
 }
 
+function observationCount(text) {
+  for (const field of ['lines', 'matches', 'files', 'changes', 'records', 'rows', 'issues']) {
+    const value = numberFrom(text, field);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function stringFrom(text, field) {
+  return new RegExp(`(?:^|\\|)${field}=([^|]*)(?:\\||$)`, 'u').exec(text)?.[1] ?? null;
+}
+
+function clipUtf8(value, maxBytes) {
+  let result = '';
+  let bytes = 0;
+  for (const character of value) {
+    const size = Buffer.byteLength(character, 'utf8');
+    if (bytes + size > maxBytes) break;
+    result += character;
+    bytes += size;
+  }
+  return result;
+}
+
+function withSuffix(prefix, suffix, maxBytes = HELIOTERM_LIMITS.maxResponseBytes) {
+  const budget = maxBytes - Buffer.byteLength(suffix, 'utf8');
+  return `${clipUtf8(prefix, Math.max(0, budget))}${suffix}`;
+}
+
 async function executePrepared(prepared, cwd) {
   const results = [];
   let parallel = [];
   const flush = async () => {
     if (!parallel.length) return;
-    results.push(...await Promise.all(parallel.map((entry) => runCommand({ command: entry.command, cwd }))));
+    results.push(...await Promise.all(parallel.map((entry) => runCommand({ command: entry.command, cwd, operation: entry.operation }))));
     parallel = [];
   };
   for (const entry of prepared) {
     if (PARALLEL_OBSERVATIONS.has(entry.operation)) parallel.push(entry);
-    else { await flush(); results.push(await runCommand({ command: entry.command, cwd })); }
+    else { await flush(); results.push(await runCommand({ command: entry.command, cwd, operation: entry.operation })); }
   }
   await flush();
   return results;
@@ -58,15 +87,33 @@ export async function runDirectBatch({ requests, cwd }) {
     const results = await executePrepared(prepared, cwd);
     const elapsedMs = Math.max(0, Math.round(performance.now() - started));
     if (results.length === 1) {
-      const text = `${results[0].text}|ms=${elapsedMs}|model=0`;
+      const text = withSuffix(results[0].text, `|ms=${elapsedMs}|model=0`);
       return { text, pass: text.startsWith('OK|'), elapsedMs, command: results[0].command, commands: [results[0].command] };
     }
     const ok = results.filter((entry) => entry.text.startsWith('OK|')).length;
+    const allOk = ok === results.length;
     const pass = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'pass') ?? 0), 0);
     const testFail = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'fail') ?? 0), 0);
     const raw = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'raw') ?? 0), 0);
-    const text = `${ok === results.length ? 'OK' : 'FAIL'}|calls=${results.length}|ok=${ok}|opfail=${results.length - ok}|pass=${pass}|testfail=${testFail}|raw=${raw}|ms=${elapsedMs}|model=0`;
-    return { text, pass: ok === results.length, elapsedMs, commands: results.map((entry) => entry.command), results };
+    const observations = results.map((entry) => {
+      const count = observationCount(entry.text);
+      const status = allOk ? '' : `:${entry.text.startsWith('OK|') ? 'ok' : 'fail'}`;
+      return `${entry.operation}${status}${count === null ? '' : `/${count}`}`;
+    }).join(',');
+    const failedResults = results.filter((entry) => !entry.text.startsWith('OK|'));
+    const more = results.filter((entry) => /(?:^|\|)more=1(?:\||$)/u.test(entry.text)).length;
+    const sampleResults = failedResults.length ? failedResults : results;
+    const sampleBytes = failedResults.length ? 96 : 36;
+    const samples = sampleResults
+      .map((entry) => ({ operation: entry.operation, sample: stringFrom(entry.text, 'sample') }))
+      .filter((entry) => entry.sample)
+      .map((entry) => `${entry.operation}:${clipUtf8(entry.sample.replace(/;/gu, ','), sampleBytes)}`)
+      .join(';');
+    const health = allOk ? '' : `|ok=${ok}|opfail=${results.length - ok}`;
+    const tests = pass || testFail ? `|pass=${pass}${testFail ? `|testfail=${testFail}` : ''}` : '';
+    const prefix = `${allOk ? 'OK' : 'FAIL'}|calls=${results.length}${health}${tests}|ops=${observations}${more ? `|more=${more}` : ''}${samples ? `|sample=${samples}` : ''}`;
+    const text = withSuffix(prefix, `|raw=${raw}|ms=${elapsedMs}|model=0`);
+    return { text, pass: allOk, elapsedMs, commands: results.map((entry) => entry.command), results };
   } catch {
     return { text: 'FAIL|calls=0|runner-error|model=0', pass: false, elapsedMs: Math.max(0, Math.round(performance.now() - started)), commands: [] };
   }

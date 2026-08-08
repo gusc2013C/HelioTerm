@@ -1,0 +1,179 @@
+{
+  "schemaVersion": "HELIOTERM_SOL_TERMINAL_ISOLATION_V1",
+  "version": "0.1.0-alpha.1",
+  "date": "2026-08-08",
+  "pass": true,
+  "scope": "Replace only bounded Sol terminal observations; retain Sol for reading code, diffs, edits, review, and judgment.",
+  "constraints": {
+    "helioluneFrozen": true,
+    "lunaWorkerUsed": false,
+    "heliotermModelTokens": 0,
+    "ownerModelChanged": false
+  },
+  "realTraceReplay": {
+    "sessionId": "019fe0f2-ce25-7d30-ac46-102f8c26a3cb",
+    "originator": "Codex Desktop",
+    "desktopVersion": "0.147.0-alpha.6.5",
+    "model": "gpt-5.6-sol",
+    "effort": "xhigh",
+    "durationMilliseconds": 439707,
+    "usage": {
+      "inputTokens": 931045,
+      "cachedInputTokens": 846336,
+      "outputTokens": 16139,
+      "reasoningOutputTokens": 7329,
+      "totalTokens": 947184
+    },
+    "toolCalls": 18,
+    "execCalls": 14,
+    "eligibleExecCalls": 6,
+    "eligibleExecCallIndexesZeroBased": [0, 2, 5, 9, 11, 16],
+    "eligibleOperations": ["file discovery", "search", "test", "test", "test", "test"],
+    "allExecOutputBytes": 139521,
+    "eligibleRawOutputBytes": 48532,
+    "conservativeCompactEnvelopeBytes": 1920,
+    "eligibleOutputReductionPercent": 96.04384735844391,
+    "wholeTraceTerminalOutputReductionPercent": 33.4085908214534,
+    "selectionRule": "Only observations whose decision-relevant result fits HelioTerm's bounded semantic output are replaced. Source reads, full diffs, patches, and implementation evidence remain raw Sol context."
+  },
+  "pairedSolIngestion": {
+    "method": "Two fresh projectless Codex Desktop tasks used the same Sol model, low effort, identical instruction, no tools, and the same ACK output. Only the delimited terminal payload changed from the six real outputs to six conservative 320-byte HelioTerm envelopes.",
+    "plain": {
+      "threadId": "019fe165-c4e6-71f3-8fb7-8e6370f12cf6",
+      "payloadBytes": 48579,
+      "inputTokens": 33088,
+      "cachedInputTokens": 6912,
+      "outputTokens": 5,
+      "totalTokens": 33093,
+      "durationMilliseconds": 5151,
+      "toolCalls": 0,
+      "final": "ACK"
+    },
+    "compact": {
+      "threadId": "019fe165-cb4d-7490-a5f4-3153fdd4f51e",
+      "payloadBytes": 1967,
+      "inputTokens": 20079,
+      "cachedInputTokens": 0,
+      "outputTokens": 5,
+      "totalTokens": 20084,
+      "durationMilliseconds": 4432,
+      "toolCalls": 0,
+      "final": "ACK"
+    },
+    "inputTokensSaved": 13009,
+    "inputTokenReductionPercent": 39.31636847195358,
+    "durationDifferencePercent": -13.958454668996312,
+    "archivedAfterMeasurement": true
+  },
+  "currentRepository": {
+    "workload": [
+      "node --test tests/*.test.mjs",
+      "git status --short",
+      "rg -n HelioTerm README.md",
+      "rg --files tests"
+    ],
+    "tests": 30,
+    "failures": 0,
+    "consecutiveSuccessfulBatchesAfterOrderingFix": 20,
+    "rawOutputBytes": 5288,
+    "compactOutputBytes": 248,
+    "outputReductionPercent": 95.31013615733737,
+    "latencyRuns": 7,
+    "plainMedianMilliseconds": 1227.3333,
+    "heliotermMedianMilliseconds": 1267.1744,
+    "heliotermOverheadMilliseconds": 39.8411,
+    "heliotermOverheadPercent": 3.246151636234429
+  },
+  "expandedSemanticCompression": {
+    "requestBudgetBytesBefore": 64,
+    "requestBudgetBytesAfter": 256,
+    "responseBudgetBytes": 256,
+    "operationClasses": ["test", "pytest", "build", "git", "search", "files", "bench", "process"],
+    "operationClassCoveragePercent": 100,
+    "commands": 8,
+    "batches": 2,
+    "tests": 35,
+    "failures": 0,
+    "rawOutputBytes": 24413,
+    "compactOutputBytes": 376,
+    "outputReductionPercent": 98.45983697210502,
+    "stress": {
+      "rounds": 10,
+      "batches": 20,
+      "commands": 80,
+      "failures": 0
+    },
+    "facts": {
+      "test": "pass/fail",
+      "pytest": "passed/failed/errors with cache and bytecode writes disabled",
+      "buildAndBench": "JSON pass/failed or tail evidence",
+      "git": "changes, files, matches, records, diff hunks/additions/deletions, or diff-check issues",
+      "search": "match count and bounded matches",
+      "files": "deterministically sorted count and sample",
+      "process": "row count without locale-dependent text"
+    },
+    "adaptiveDisclosure": "more=1 marks incomplete evidence; full source and complete diffs remain an owner-terminal decision.",
+    "windowsBuildFix": "build invokes npm-cli.js through the active Node executable instead of spawning npm.cmd with execFile.",
+    "latency": {
+      "runs": 3,
+      "plainMedianMilliseconds": 2204.4951,
+      "heliotermMedianMilliseconds": 2213.2869,
+      "heliotermOverheadMilliseconds": 8.7918,
+      "heliotermOverheadPercent": 0.39881240833785636
+    }
+  },
+  "realPythonProjects": {
+    "method": "Seven alternating end-to-end runs after warm-up. Plain terminal executes pytest, Git status, search, and file discovery sequentially; HelioTerm receives the same four requests as one batch. Git porcelain state is compared before and after.",
+    "singlePytestBoundary": {
+      "TactileGear": {
+        "plainMedianMilliseconds": 377.4565,
+        "heliotermMedianMilliseconds": 445.0121,
+        "heliotermOverheadMilliseconds": 67.5556,
+        "heliotermOverheadPercent": 17.8976,
+        "rawOutputBytes": 829,
+        "compactOutputBytes": 55,
+        "outputReductionPercent": 93.3655
+      },
+      "diagnosticBackend": {
+        "plainMedianMilliseconds": 505.1041,
+        "heliotermMedianMilliseconds": 563.2767,
+        "heliotermOverheadMilliseconds": 58.1726,
+        "heliotermOverheadPercent": 11.517,
+        "rawOutputBytes": 479,
+        "compactOutputBytes": 55,
+        "outputReductionPercent": 88.5177
+      }
+    },
+    "batched": {
+      "TactileGear": {
+        "tests": 34,
+        "pass": true,
+        "workingTreeUnchanged": true,
+        "plainMedianMilliseconds": 479.0562,
+        "heliotermMedianMilliseconds": 499.8484,
+        "heliotermOverheadMilliseconds": 20.7922,
+        "heliotermOverheadPercent": 4.340242334824351,
+        "rawOutputBytes": 34565,
+        "compactOutputBytesIncludingCliNewline": 257,
+        "outputReductionPercent": 99.2564733111529
+      },
+      "diagnosticBackend": {
+        "tests": 12,
+        "pass": true,
+        "workingTreeUnchanged": true,
+        "plainMedianMilliseconds": 594.5628,
+        "heliotermMedianMilliseconds": 608.7418,
+        "heliotermOverheadMilliseconds": 14.179,
+        "heliotermOverheadPercent": 2.3847775205580124,
+        "rawOutputBytes": 3234,
+        "compactOutputBytesIncludingCliNewline": 216,
+        "outputReductionPercent": 93.32096474953617
+      }
+    }
+  },
+  "conclusion": {
+    "proved": "Terminal-only replacement materially reduces Sol-visible input: 13,009 exact input tokens in the paired ingestion measurement, while the selected real outputs shrink by 96.04% and the current four-operation batch shrinks by 95.31%.",
+    "notProved": "The paired ingestion measurement is not a full counterfactual replay of the 439.7-second engineering task, and its one-shot latency is not a stable end-to-end speed claim.",
+    "speedBoundary": "For an already hand-batched local workload, HelioTerm adds about 39.8 ms. Speed gains must come from fewer owner tool turns and parallel observations, not from claiming that the wrapper executes tiny commands faster."
+  }
+}

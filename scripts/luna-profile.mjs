@@ -15,9 +15,11 @@ export function shouldUseLunaCompression({
   materialChange = false,
   truncated = false,
   semanticSummaryRequired = false,
+  semanticScore = 0,
 } = {}) {
   if (!Number.isSafeInteger(rawBytes) || rawBytes < 0) throw new Error('rawBytes must be a non-negative safe integer');
-  return rawBytes >= 2048
-    && semanticSummaryRequired
-    && (materialFailure || materialChange || truncated);
+  if (!Number.isInteger(semanticScore) || semanticScore < 0 || semanticScore > 4) throw new Error('semanticScore must be 0..4');
+  if (!semanticSummaryRequired || !(materialFailure || materialChange || truncated)) return false;
+  const minimumBytes = materialFailure ? 512 : semanticScore >= 3 ? 768 : semanticScore >= 2 ? 1024 : 1536;
+  return semanticScore > 0 && rawBytes >= minimumBytes;
 }

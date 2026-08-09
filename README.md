@@ -1,17 +1,17 @@
 # HelioTerm
 
-HelioTerm is a small, independently usable semantic terminal for Codex Desktop. Its default direct path executes bounded operations through a deterministic compressor. Large material failures or changes can be escalated through an opaque local ticket to one temporary Desktop-native Luna session; ordinary successes remain `model=0`.
+HelioTerm is a small, independently usable semantic terminal for Codex Desktop. Its default direct path executes bounded operations through a deterministic compressor, then routes evidence with real semantic value through an opaque local ticket to one temporary Desktop-native Luna session. Complete machine facts remain `model=0`; failures, real patches, and diverse truncated source/search/build evidence can use Luna/high without making Sol poll a terminal.
 
 HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this repository is self-contained for users who only need the terminal component.
 
 ## What it guarantees
 
-- Zero HelioTerm model tokens for ordinary structured results; owner intelligence is unchanged. Adaptive Luna requires at least 2 KiB plus material failure/change evidence, or an explicit semantic request for truncated evidence.
+- Zero HelioTerm model tokens for complete structured facts; owner intelligence is unchanged. Adaptive routing uses operation type, failure state, truncation, evidence diversity, patch semantics, and byte size: useful failures may route from 512 bytes and diverse semantic evidence from 768 bytes, while status/stat/count/version output and repeated noise stay deterministic.
 - Deterministic savings accounting: exact UTF-8 bytes plus a clearly labelled local bytes/4 token estimate. The meter never calls a model and never presents estimates as provider billing.
 - One optional persistent model-backed leaf, never a planner, writer, reviewer, or delegator.
 - One temporary Desktop-native Luna semantic task for each routed burst. It uses a projectless `gpt-5.6-luna` task with high effort by default, reserves xhigh for complex causal analysis, reuses at most eight turns, and is archived on every completion path. The Sol task sees only an opaque ticket before Luna reads the bounded evidence itself.
 - Fifteen deterministic operation classes: Node `test`, Python `pytest`, `build`, read-only `git`, `search`, recursive `files`, `bench`, `process`, targeted `read`, non-recursive `list`, `json`, `stat`, safe cross-ecosystem `check`, read-only `deps`, and `version`. Python tests disable cache and bytecode writes; repository inspection rejects absolute paths and parent traversal.
-- Broad safe command coverage without a shell: quality checks cover Node/npm, Python, Ruff, ESLint, TypeScript, Cargo, Go, .NET, Maven, Gradle, and CMake forms; dependency and version operations admit only known read-only forms. Mutating package commands and interpreter eval flags fail before execution.
+- Broad safe command coverage without a shell: quality checks cover Node/npm, Python, Ruff, ESLint, TypeScript, Cargo, Go, .NET, Maven, Gradle, and CMake forms; dependency and version operations admit only known read-only forms. Unknown package scripts, arbitrary Node benchmark helpers, ripgrep preprocessors/config, Git output/external-diff flags, interpreter eval flags, absolute paths, traversal, and repository-relative symlink escapes fail before execution.
 - Useful bounded evidence: search, file-list, and read-only Git results retain a sanitized sample instead of forcing a second plain terminal call; Luna evidence collapses consecutive duplicate lines while retaining the repeat count and final diagnostics.
 - Adaptive disclosure: `more=1` means the semantic facts are valid but the sample is incomplete. Sol can request the original source or full diff only when judgment actually needs it.
 - Up to four different observations share one Node startup and one owner tool turn; adjacent read-only observations run concurrently.
@@ -22,7 +22,7 @@ HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this reposito
 
 The rule-first `direct-runner.mjs` path is the default. Its CLI enables adaptive ticket routing; use `--no-adaptive` only for a matched rule-only benchmark. Add `--semantic` when a truncated non-material observation genuinely needs semantic compression. Spark is not used. The older reusable Luna/high terminal role remains a compatibility fallback, not the adaptive path.
 
-The MCP server exposes `run`, `savings`, `luna_context`, and `luna_accept`. `run` records each command's tool-content reduction and may return a short Luna ticket. The temporary Luna task reads bounded, redacted evidence through `luna_context`; the owner validates its JSON through `luna_accept`, which consumes the one-use ticket on both semantic acceptance and rule-only fallback. When a freshly installed MCP tool is not projected until Desktop restarts, one local Node ticket-reader call inside the Luna Desktop task provides the same evidence without starting Codex CLI or returning it to Sol. The validator reports exact raw/evidence/context/response/final bytes without asking AI to count. `savings` remains rule-output-only and deliberately excludes MCP discovery, JSON-RPC framing, provider billing, and later reasoning.
+The MCP server exposes `observe`, `run`, `supervise`, `job_start`, `job_wait`, `savings`, `luna_context`, and `luna_accept`. `observe` contains only read-only operation classes; execution tools are truthfully marked as capable of running project code. `run`, `supervise`, and completed background jobs record tool-content reduction and may return a short Luna ticket. The temporary Luna task reads bounded, redacted evidence through `luna_context`; the owner validates its JSON through `luna_accept`, which consumes the one-use ticket on both semantic acceptance and rule-only fallback. The validator reports exact raw/evidence/context/response/final bytes without asking AI to count. `savings` remains rule-output-only and deliberately excludes MCP discovery, JSON-RPC framing, provider billing, and later reasoning.
 
 Run the ordinary direct path from this checkout with:
 
@@ -41,6 +41,14 @@ Targeted source/config and toolchain inspection use the same compact path:
 ```powershell
 node scripts/direct-runner.mjs --cwd . --request "T|read|scripts/kernel.mjs 1 40" --request "T|json|package.json name scripts" --request "T|check|node --check scripts/kernel.mjs" --request "T|deps|npm ls --depth=0"
 ```
+
+## Long-running commands without model polling
+
+Use MCP `supervise` when one expected long operation should occupy a single tool call. HelioTerm streams the process output locally, retains at most a 2 MiB diagnostic tail, counts all raw bytes, enforces its own deadline, and returns once with `wait=internal|polls=0`. Other MCP requests such as `ping` remain responsive while it waits.
+
+For work lasting minutes or hours, call `job_start` once with an allowlisted operation and a timeout of at most 43,200 seconds. It returns a 16-character handle immediately; Codex can continue editing, reading, or testing through other calls. At a natural checkpoint—or after all other work is done—call `job_wait` once. HelioTerm performs the low-level state checks locally and returns the compressed final result with `polls=0`. Job state is stored under the operating-system temporary directory for seven days, so another Desktop task can collect it after a Desktop restart.
+
+MCP cannot inject an unsolicited tool result into a conversation after `job_start` has already returned. The one later `job_wait` is therefore intentional; it replaces repeated Codex terminal polling with one local wait. `.mcp.json` raises Codex's per-tool timeout to 12 hours plus a small transport margin.
 
 ## Install from this checkout
 
@@ -101,4 +109,4 @@ After a Desktop restart, the installed `0.1.0` cache exposed the updated skill p
 
 The complete 0.1.0 release evidence is available in [the machine-readable release record](benchmarks/results/0.1.0-release.json).
 
-HelioTerm 0.1.1 adds the adaptive Desktop-native Luna channel, fifteen-operation coverage, exact process-local savings metering, duplicate-evidence collapse, and one-use ticket cleanup. Its release gate passed 76 local tests, 34 TactileGear tests, and 188 frozen Heliolune tests; pathless search, zero-match search, Windows process filtering, preflight, diff checks, and three-run real-project comparisons were exercised through HelioTerm itself. See [the machine-readable 0.1.1 release record](benchmarks/results/0.1.1-release.json).
+HelioTerm 0.1.1 adds the adaptive Desktop-native Luna channel, semantic-value routing, fifteen-operation coverage, exact process-local savings metering, duplicate-evidence collapse, one-use ticket cleanup, truthful observation/execution tool boundaries, and no-poll foreground/background supervision. Its current release gate passed 84 local tests, 34 TactileGear tests, and 188 frozen Heliolune tests. A 12-second background acceptance proved that another real Git observation completed before the job, exactly one `job_wait` collected the result, and model polling stayed zero. See [the machine-readable 0.1.1 release record](benchmarks/results/0.1.1-release.json).

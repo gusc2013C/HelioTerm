@@ -5,9 +5,9 @@
       "args": ["./scripts/mcp-server.mjs"],
       "cwd": ".",
       "startup_timeout_sec": 30,
-      "tool_timeout_sec": 300,
-      "default_tools_approval_mode": "approve",
-      "enabled_tools": ["run", "savings", "luna_context", "luna_accept"]
+      "tool_timeout_sec": 43260,
+      "default_tools_approval_mode": "writes",
+      "enabled_tools": ["observe", "run", "supervise", "job_start", "job_wait", "savings", "luna_context", "luna_accept"]
     }
   }
 }

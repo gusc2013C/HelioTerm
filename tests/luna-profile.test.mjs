@@ -27,12 +27,13 @@ test('Desktop Luna uses xhigh only for complex semantic diagnosis', () => {
   assert.equal(selectLunaEffort({ causalAnalysis: true }), 'xhigh');
 });
 
-test('Luna routing requires size, semantic need, and material evidence', () => {
-  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, truncated: true, semanticSummaryRequired: true }), true);
-  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, materialFailure: true, semanticSummaryRequired: true }), true);
-  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, materialChange: true, semanticSummaryRequired: true }), true);
-  assert.equal(shouldUseLunaCompression({ rawBytes: 2_047, truncated: true, semanticSummaryRequired: true }), false);
-  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, truncated: true }), false);
-  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, semanticSummaryRequired: true }), false);
+test('Luna routing scales its byte floor with deterministic semantic value', () => {
+  assert.equal(shouldUseLunaCompression({ rawBytes: 768, truncated: true, semanticSummaryRequired: true, semanticScore: 3 }), true);
+  assert.equal(shouldUseLunaCompression({ rawBytes: 512, materialFailure: true, semanticSummaryRequired: true, semanticScore: 4 }), true);
+  assert.equal(shouldUseLunaCompression({ rawBytes: 1024, materialChange: true, semanticSummaryRequired: true, semanticScore: 2 }), true);
+  assert.equal(shouldUseLunaCompression({ rawBytes: 767, truncated: true, semanticSummaryRequired: true, semanticScore: 3 }), false);
+  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, truncated: true, semanticScore: 3 }), false);
+  assert.equal(shouldUseLunaCompression({ rawBytes: 10_000, truncated: true, semanticSummaryRequired: true, semanticScore: 0 }), false);
   assert.throws(() => shouldUseLunaCompression({ rawBytes: -1 }), /rawBytes/u);
+  assert.throws(() => shouldUseLunaCompression({ rawBytes: 1000, semanticScore: 5 }), /semanticScore/u);
 });

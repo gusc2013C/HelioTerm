@@ -37,7 +37,7 @@ function withTicketRoot(run) {
   try { return run(root); } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-test('adaptive routing requires size plus material or explicitly semantic evidence', () => {
+test('adaptive routing uses semantic value instead of one coarse size gate', () => {
   assert.equal(classifyAdaptiveCompression({ results: [observed({ raw: 'small' })] }).useLuna, false);
   assert.equal(classifyAdaptiveCompression({ results: [observed()] }).useLuna, true);
   const truncatedRead = observed({
@@ -48,6 +48,16 @@ test('adaptive routing requires size plus material or explicitly semantic eviden
   });
   assert.equal(classifyAdaptiveCompression({ results: [truncatedRead] }).useLuna, false);
   assert.equal(classifyAdaptiveCompression({ results: [truncatedRead], semantic: true }).useLuna, true);
+  const diverseRead = observed({
+    text: 'OK|calls=1|lines=200|more=1|raw=4096',
+    raw: Array.from({ length: 120 }, (_, index) => `src/module-${index % 8}/file.mjs:${index}: branch ${index}`).join('\n'),
+    operation: 'read',
+    args: ['scripts/example.mjs', '1', '200'],
+  });
+  const automatic = classifyAdaptiveCompression({ results: [diverseRead] });
+  assert.equal(automatic.useLuna, true);
+  assert.equal(automatic.semanticScore, 3);
+  assert.equal(automatic.reason, 'semantic-output');
 });
 
 test('large multi-failure evidence deterministically selects xhigh', () => {
@@ -60,18 +70,28 @@ test('large multi-failure evidence deterministically selects xhigh', () => {
   assert.equal(decision.effort, 'xhigh');
 });
 
-test('cross-module working-tree changes stay on high without a failure chain', () => {
+test('status-only changes stay deterministic while real patches route to Luna', () => {
   const change = observed({
     text: 'OK|calls=1|changes=2|more=1|raw=4096',
     raw: ' M src/a/one.mjs\n M src/b/two.mjs\n'.repeat(100),
     operation: 'git',
     args: ['status', '--short'],
   });
-  const decision = classifyAdaptiveCompression({ results: [change] });
-  assert.equal(decision.useLuna, true);
-  assert.equal(decision.crossModule, true);
-  assert.equal(decision.materialFailure, false);
-  assert.equal(decision.effort, 'high');
+  const statusDecision = classifyAdaptiveCompression({ results: [change] });
+  assert.equal(statusDecision.useLuna, false);
+  assert.equal(statusDecision.crossModule, true);
+  assert.equal(statusDecision.materialFailure, false);
+
+  const patch = observed({
+    text: 'OK|calls=1|files=2|hunks=3|add=12|del=4|more=1|raw=4096',
+    raw: 'diff --git a/src/a/one.mjs b/src/a/one.mjs\n@@ change a\n+new a\ndiff --git a/src/b/two.mjs b/src/b/two.mjs\n@@ change b\n-old b\n'.repeat(40),
+    operation: 'git',
+    args: ['diff'],
+  });
+  const patchDecision = classifyAdaptiveCompression({ results: [patch] });
+  assert.equal(patchDecision.useLuna, true);
+  assert.equal(patchDecision.reason, 'patch');
+  assert.equal(patchDecision.effort, 'high');
 });
 
 test('evidence is bounded, workspace-normalized, and secret-redacted before Luna', () => {

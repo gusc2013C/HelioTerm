@@ -1,6 +1,6 @@
 ---
 name: helioterm
-description: "Use by default for bounded terminal work in software projects: tests, builds, lint/type checks, read-only Git, search, recursive files, targeted source/config reads, directory/JSON/stat inspection, dependency and version queries, benchmarks, or process observations. Batch up to four commands into one fast rule-first result; adaptively route only large material evidence to a temporary Desktop-native Luna session and archive it after the burst."
+description: "Use by default for bounded and long-running terminal work in software projects: batch ordinary observations, supervise one long command without model polling, or persist a background job while Codex continues. Route semantically valuable failures, patches, and diverse truncated evidence to a temporary Desktop-native Luna session and archive it after the burst."
 ---
 
 # HelioTerm
@@ -27,13 +27,17 @@ Use these deterministic inspection operations before falling back to a plain ter
 
 Arguments run without a shell. Reject path traversal, mutating package commands, interpreter eval flags, and unsupported command families before execution.
 
+When the HelioTerm MCP tools are projected, prefer `observe` for read-only Git/search/files/process/read/list/json/stat/deps/version work. Use `run` for short tests, builds, checks, or benchmarks that execute project code. Their annotations intentionally differ so Codex can auto-approve observations without misrepresenting execution as read-only.
+
+For an operation expected to take more than roughly ten seconds, do not start it through an ordinary terminal and repeatedly poll it. If no other owner work can proceed, call `supervise` once with an explicit deadline; HelioTerm streams and compresses output locally and returns `polls=0`. If other work can continue—or the operation may take minutes or hours—call `job_start`, retain its opaque handle, continue useful work, and call `job_wait` exactly once at the next natural checkpoint or when nothing else remains. A background deadline may be at most 43,200 seconds. State survives Desktop task restarts for seven days. Standard MCP cannot push an unsolicited result after `job_start`, so one later `job_wait` is required; never replace it with repeated status calls.
+
 Treat `more=1` as an explicit truncation signal. Accept the compact facts for discovery, status, successful checks, and test/build outcomes. For source, narrow `read` to a smaller line range first. Use a plain owner terminal only when full source, a complete diff, omitted failure detail, or a genuinely unsupported command is necessary for judgment; treat each fallback as coverage evidence to evaluate for a safe HelioTerm operation.
 
 Interpret `OK` as an implicit zero exit and all-operation success; successful batches omit redundant zero/default fields. Require explicit exit and operation-health evidence on `FAIL`.
 
 Token accounting is deterministic. If the MCP transport is already active, call its `savings` tool once at the end of a workload to read process-local exact byte totals and labelled bytes/4 estimates. Do not ask a model to count tokens, and do not treat the estimate as provider billing.
 
-Keep the direct rule compressor for structured successes, status, search, and file facts. Adaptive Luna is enabled only for output of at least 2 KiB when there is a material failure or working-tree change. For a truncated but otherwise non-material observation, add `--semantic` only when the user's request actually needs a semantic summary. Never use Luna merely to count, parse, list, or restate facts.
+Keep the direct rule compressor for complete counts, status, stat, version, dependency shape, and file facts. Adaptive routing scores semantic value rather than using one coarse threshold: useful failures can route from 512 bytes; real patches and diverse truncated read/search/build/check evidence can route from 768 bytes; status-only changes, diff statistics, repeated noise, and complete machine facts stay rule-only. Add `--semantic` when the user's judgment needs meaning from otherwise ambiguous truncated evidence. Never use Luna merely to count, parse, list, or restate facts. A completed `supervise` or background job follows the same routing rules.
 
 When a result contains `route=luna`, use this Desktop-only lifecycle:
 

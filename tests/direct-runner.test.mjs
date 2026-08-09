@@ -151,7 +151,7 @@ test('evidence removes repeated diagnostics and normalizes the workspace path', 
 test('files lists one repo-relative directory without a shell', async () => {
   const result = await runDirect({ request: 'T|files|tests', cwd: process.cwd() });
   assert.equal(result.pass, true, result.text);
-  assert.deepEqual(result.command, { file: 'rg', args: ['--files', 'tests'] });
+  assert.deepEqual(result.command, { file: 'rg', args: ['--no-config', '--files', 'tests'] });
   assert.match(result.text, /\|sample=[^|]*tests[\\/][^|;]+\.test\.mjs/u);
 });
 

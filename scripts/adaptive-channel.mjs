@@ -100,6 +100,30 @@ function distinctSourceAreas(evidence) {
   return areas.size;
 }
 
+function evidenceDiversity(evidence) {
+  const lines = String(evidence ?? '')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('...[same line repeated'));
+  return new Set(lines).size;
+}
+
+function semanticGitPatch(result) {
+  if (result.operation !== 'git') return false;
+  const [subcommand, ...args] = result.command?.args ?? [];
+  if (!['diff', 'show'].includes(subcommand)) return false;
+  return !args.some((value) => /^(?:--check|--name-only|--name-status|--numstat|--shortstat|--stat)(?:=|$)/u.test(value));
+}
+
+function semanticOperationScore(result, { diverseEvidence, diagnosticEvidence }) {
+  if (!String(result.text ?? '').startsWith('OK|')) return 4;
+  if (semanticGitPatch(result)) return 4;
+  if (field(result.text, 'more') !== '1') return 0;
+  const richOperation = ['read', 'search', 'build', 'bench', 'check'].includes(result.operation)
+    || (result.operation === 'git' && ['log', 'show'].includes(result.command?.args?.[0]));
+  return richOperation && (diverseEvidence || diagnosticEvidence) ? 3 : 0;
+}
+
 export function classifyAdaptiveCompression({ results, semantic = false } = {}) {
   const entries = Array.isArray(results) ? results.filter(Boolean) : [];
   const rawBytes = entries.reduce((sum, result) => sum + (result.savings?.rawBytes ?? integerField(result.text, 'raw') ?? 0), 0);
@@ -107,11 +131,16 @@ export function classifyAdaptiveCompression({ results, semantic = false } = {}) 
   const materialFailure = failures.length > 0;
   const materialChange = entries.some(materialGitChange);
   const truncated = entries.some((result) => field(result.text, 'more') === '1');
-  const semanticSummaryRequired = Boolean(semantic || materialFailure || materialChange);
   const evidence = entries.map((result) => `[${result.operation}]\n${result.adaptiveEvidence ?? ''}`).join('\n');
+  const diverseEvidence = evidenceDiversity(evidence) >= 4;
+  const diagnosticEvidence = /(?:^|\b)(?:assert(?:ion)?error|error|exception|fail(?:ed|ure)?|panic|traceback|warn(?:ing)?)(?:\b|:)/iu.test(evidence);
+  const automaticScore = entries.reduce((maximum, result) => Math.max(maximum, semanticOperationScore(result, { diverseEvidence, diagnosticEvidence })), 0);
+  const semanticScore = semantic && (truncated || materialFailure || materialChange) ? Math.max(3, automaticScore) : automaticScore;
+  const semanticSummaryRequired = semanticScore > 0;
   const crossModule = distinctSourceAreas(evidence) > 1;
   const complexFailure = failures.length > 1 || (materialFailure && rawBytes >= 32 * 1024);
-  const useLuna = shouldUseLunaCompression({ rawBytes, materialFailure, materialChange, truncated, semanticSummaryRequired });
+  const causalAnalysis = semanticScore === 4 && materialChange && crossModule && rawBytes >= 16 * 1024;
+  const useLuna = shouldUseLunaCompression({ rawBytes, materialFailure, materialChange, truncated, semanticSummaryRequired, semanticScore });
   return Object.freeze({
     useLuna,
     rawBytes,
@@ -119,10 +148,13 @@ export function classifyAdaptiveCompression({ results, semantic = false } = {}) 
     materialChange,
     truncated,
     semanticSummaryRequired,
+    semanticScore,
+    diverseEvidence,
+    diagnosticEvidence,
     complexFailure,
     crossModule,
-    effort: selectLunaEffort({ complexFailure, crossModule: materialFailure && crossModule }),
-    reason: materialFailure ? 'failure' : materialChange ? 'change' : truncated ? 'truncated' : 'none',
+    effort: selectLunaEffort({ complexFailure, crossModule: materialFailure && crossModule, causalAnalysis }),
+    reason: materialFailure ? 'failure' : semanticGitPatch(entries.find((entry) => semanticGitPatch(entry)) ?? {}) ? 'patch' : semantic ? 'requested' : semanticScore > 0 ? 'semantic-output' : 'none',
     evidence,
   });
 }

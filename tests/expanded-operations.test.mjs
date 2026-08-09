@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { validateRequest } from '../scripts/firewall.mjs';
 import { runDirectBatch } from '../scripts/direct-runner.mjs';
-import { commandFor, OPERATIONS, semanticFacts } from '../scripts/kernel.mjs';
+import { commandFor, INTERNAL_OBSERVER, OPERATIONS, semanticFacts } from '../scripts/kernel.mjs';
 
 test('exposes fifteen bounded operation classes', () => {
   assert.deepEqual([...OPERATIONS].sort(), [
@@ -58,24 +61,69 @@ test('allows common quality and dependency observations but rejects mutating for
 
 test('maps expanded commands without a shell', () => {
   const read = commandFor('read', 'package.json 1 5');
-  assert.equal(read.file, process.execPath);
-  assert.deepEqual(read.args.slice(-4), ['read', 'package.json', '1', '5']);
+  assert.equal(read.file, INTERNAL_OBSERVER);
+  assert.deepEqual(read.args, ['read', 'package.json', '1', '5']);
   assert.equal(commandFor('check', 'node --check scripts/kernel.mjs').file, process.execPath);
   assert.deepEqual(commandFor('check', 'py -m pytest tests').args, ['-m', 'pytest', '-p', 'no:cacheprovider', 'tests']);
   assert.deepEqual(commandFor('version', 'git'), { file: 'git', args: ['--version'] });
 });
 
 test('keeps pathless search off stdin and maps bounded process queries', () => {
-  assert.deepEqual(commandFor('search', '0.1.0'), { file: 'rg', args: ['0.1.0', '.'] });
-  assert.deepEqual(commandFor('search', '-n 0.1.0'), { file: 'rg', args: ['-n', '0.1.0', '.'] });
-  assert.deepEqual(commandFor('search', '-g *.mjs model=0'), { file: 'rg', args: ['-g', '*.mjs', 'model=0', '.'] });
-  assert.deepEqual(commandFor('search', '-n model=0 README.md').args, ['-n', 'model=0', 'README.md']);
+  assert.deepEqual(commandFor('search', '0.1.0'), { file: 'rg', args: ['--no-config', '0.1.0', '.'] });
+  assert.deepEqual(commandFor('search', '-n 0.1.0'), { file: 'rg', args: ['--no-config', '-n', '0.1.0', '.'] });
+  assert.deepEqual(commandFor('search', '-g *.mjs model=0'), { file: 'rg', args: ['--no-config', '-g', '*.mjs', 'model=0', '.'] });
+  assert.deepEqual(commandFor('search', '-n model=0 README.md').args, ['--no-config', '-n', 'model=0', 'README.md']);
 
   const byName = commandFor('process', 'node');
   if (process.platform === 'win32') assert.deepEqual(byName, { file: 'tasklist.exe', args: ['/FI', 'IMAGENAME eq node.exe'] });
   else assert.deepEqual(byName, { file: 'pgrep', args: ['-a', '-x', 'node'] });
   assert.throws(() => commandFor('process', 'node extra'));
   assert.throws(() => commandFor('process', '*'));
+});
+
+test('rejects execution escape hatches found by real-project probing', () => {
+  for (const request of [
+    'T|build|definitely_missing_helioterm_script',
+    'T|bench|scripts/luna-ticket-reader.mjs --ticket invalid',
+    'T|search|--pre definitely_missing_preprocessor HelioTerm README.md',
+    String.raw`T|search|localhost C:\Windows\System32\drivers\etc\hosts`,
+    'T|git|diff --output=NUL',
+    'T|git|diff --ext-diff',
+    'T|git|grep -O less HelioTerm',
+    'T|check|mvn test deploy',
+    'T|check|gradle test publish',
+  ]) assert.equal(validateRequest(request).pass, false, request);
+
+  for (const request of [
+    'T|build|preflight',
+    'T|bench|benchmarks/supervise-wait.mjs 10',
+    'T|search|-n HelioTerm README.md',
+    'T|git|diff --check',
+  ]) assert.equal(validateRequest(request).pass, true, request);
+});
+
+test('disables repository-configured external Git diff and text conversion', () => {
+  assert.deepEqual(commandFor('git', 'diff --check').args, ['diff', '--no-ext-diff', '--no-textconv', '--check']);
+  assert.deepEqual(commandFor('git', 'show HEAD').args, ['show', '--no-ext-diff', '--no-textconv', 'HEAD']);
+  assert.deepEqual(commandFor('git', 'status --short').args, ['status', '--short']);
+});
+
+test('rejects repository-relative symlinks that resolve outside the working directory', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'helioterm-containment-'));
+  const root = join(parent, 'root');
+  const outside = join(parent, 'outside');
+  mkdirSync(root);
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'secret.txt'), 'outside\n');
+  writeFileSync(join(outside, 'tool.mjs'), 'process.stdout.write("outside")\n');
+  symlinkSync(outside, join(root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  try {
+    assert.throws(() => commandFor('search', 'outside escape', root), /inside the working directory/u);
+    assert.throws(() => commandFor('files', 'escape', root), /inside the working directory/u);
+    assert.throws(() => commandFor('bench', 'escape/tool.mjs', root), /inside the working directory/u);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
 });
 
 test('runs pathless search and a named process observation without hanging', async () => {

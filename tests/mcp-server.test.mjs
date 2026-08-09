@@ -1,18 +1,52 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 import { createAdaptiveTicket, readAdaptiveTicket, removeAdaptiveTicket } from '../scripts/adaptive-channel.mjs';
+import { JOB_DIRECTORY } from '../scripts/job-manager.mjs';
 import {
   commandFor,
+  JOB_START_TOOL,
+  JOB_WAIT_TOOL,
   LUNA_ACCEPT_TOOL,
   LUNA_CONTEXT_TOOL,
+  OBSERVE_TOOL,
   parseArguments,
   runOperation,
+  runSupervisedOperation,
   SAVINGS_TOOL,
+  SUPERVISE_TOOL,
   TOOL,
   TOOLS,
 } from '../scripts/mcp-server.mjs';
+
+test('supervised execution streams large output without exposing it to the model', async () => {
+  const outputBytes = 3 * 1024 * 1024;
+  const result = await runSupervisedOperation({
+    operation: 'bench',
+    argument: `benchmarks/supervise-wait.mjs 10 ${outputBytes}`,
+    cwd: process.cwd(),
+    timeoutMilliseconds: 5000,
+  });
+  assert.match(result.text, /^OK\|calls=1/u);
+  assert.ok(result.savings.rawBytes >= outputBytes, JSON.stringify(result.savings));
+  assert.ok(result.savings.compactBytes <= 220, JSON.stringify(result.savings));
+  assert.equal(result.modelPolls, 0);
+});
+
+test('supervised execution enforces its own deadline without model polling', async () => {
+  const result = await runSupervisedOperation({
+    operation: 'bench',
+    argument: 'benchmarks/supervise-wait.mjs 2000',
+    cwd: process.cwd(),
+    timeoutMilliseconds: 50,
+  });
+  assert.match(result.text, /^FAIL\|calls=1\|exit=124/u);
+  assert.match(result.text, /HelioTerm timeout/u);
+  assert.equal(result.modelPolls, 0);
+  assert.ok(result.durationMilliseconds < 2000, result.durationMilliseconds);
+});
 
 test('MCP tool schema is narrow and shell-free command mapping is deterministic', () => {
   assert.deepEqual(TOOL.inputSchema.required, ['operation', 'argument', 'cwd']);
@@ -28,7 +62,7 @@ test('MCP tool schema is narrow and shell-free command mapping is deterministic'
     assert.match(build.args[0], /node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/u);
     assert.deepEqual(build.args.slice(1), ['run', 'preflight']);
   } else assert.deepEqual(build, { file: 'npm', args: ['run', 'preflight'] });
-  assert.deepEqual(commandFor('files', 'tests'), { file: 'rg', args: ['--files', 'tests'] });
+  assert.deepEqual(commandFor('files', 'tests'), { file: 'rg', args: ['--no-config', '--files', 'tests'] });
   assert.deepEqual(parseArguments(String.raw`src\lib`), [String.raw`src\lib`]);
   for (const argument of ['/tmp', String.raw`\\server\share`, String.raw`C:\repo`, 'src/../other', 'src other', '-hidden']) {
     assert.throws(() => commandFor('files', argument), /files/u);
@@ -56,7 +90,9 @@ test('MCP stdio implements initialize, tool listing, and compact tool call', () 
   const responses = run.stdout.trim().split(/\r?\n/u).map(JSON.parse);
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.name, 'helioterm');
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.1.1');
-  assert.deepEqual(responses.find((entry) => entry.id === 2).result.tools.map((tool) => tool.name), ['run', 'savings', 'luna_context', 'luna_accept']);
+  assert.deepEqual(responses.find((entry) => entry.id === 2).result.tools.map((tool) => tool.name), [
+    'observe', 'run', 'supervise', 'job_start', 'job_wait', 'savings', 'luna_context', 'luna_accept',
+  ]);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /^OK\|calls=1/u);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /\|model=0$/u);
   const savings = responses.find((entry) => entry.id === 4).result.content[0].text;
@@ -67,19 +103,101 @@ test('MCP stdio implements initialize, tool listing, and compact tool call', () 
 });
 
 test('MCP savings tool is read-only, deterministic, and enabled', () => {
-  assert.equal(TOOLS[0], TOOL);
-  assert.equal(TOOLS[1], SAVINGS_TOOL);
+  assert.equal(TOOLS[0], OBSERVE_TOOL);
+  assert.equal(TOOLS[1], TOOL);
+  assert.equal(TOOLS[2], SUPERVISE_TOOL);
+  assert.equal(TOOLS[3], JOB_START_TOOL);
+  assert.equal(TOOLS[4], JOB_WAIT_TOOL);
+  assert.equal(TOOLS[5], SAVINGS_TOOL);
   assert.deepEqual(SAVINGS_TOOL.inputSchema, { type: 'object', additionalProperties: false, properties: {} });
   assert.equal(SAVINGS_TOOL.annotations.readOnlyHint, true);
   assert.equal(SAVINGS_TOOL.annotations.destructiveHint, false);
+  assert.equal(OBSERVE_TOOL.annotations.readOnlyHint, true);
+  assert.equal(TOOL.annotations.readOnlyHint, false);
+  assert.equal(TOOL.annotations.destructiveHint, true);
+  assert.equal(SUPERVISE_TOOL.annotations.readOnlyHint, false);
+  assert.equal(JOB_START_TOOL.annotations.idempotentHint, false);
+  assert.equal(JOB_WAIT_TOOL.annotations.readOnlyHint, true);
   const config = JSON.parse(readFileSync('.mcp.json', 'utf8'));
-  assert.equal(TOOLS[2], LUNA_CONTEXT_TOOL);
-  assert.equal(TOOLS[3], LUNA_ACCEPT_TOOL);
+  assert.equal(TOOLS[6], LUNA_CONTEXT_TOOL);
+  assert.equal(TOOLS[7], LUNA_ACCEPT_TOOL);
   assert.equal(LUNA_CONTEXT_TOOL.annotations.readOnlyHint, true);
   assert.equal(LUNA_ACCEPT_TOOL.annotations.readOnlyHint, false);
   assert.equal(LUNA_ACCEPT_TOOL.annotations.destructiveHint, true);
   assert.equal(LUNA_ACCEPT_TOOL.annotations.idempotentHint, false);
-  assert.deepEqual(config.mcpServers.helioterm.enabled_tools, ['run', 'savings', 'luna_context', 'luna_accept']);
+  assert.equal(config.mcpServers.helioterm.default_tools_approval_mode, 'writes');
+  assert.equal(config.mcpServers.helioterm.tool_timeout_sec, 43260);
+  assert.deepEqual(config.mcpServers.helioterm.enabled_tools, [
+    'observe', 'run', 'supervise', 'job_start', 'job_wait', 'savings', 'luna_context', 'luna_accept',
+  ]);
+});
+
+test('MCP supervise waits internally once while ping remains responsive', () => {
+  const requests = [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'supervise', arguments: { operation: 'bench', argument: 'benchmarks/supervise-wait.mjs 150', cwd: process.cwd(), timeoutSeconds: 5, adaptive: false } } },
+    { jsonrpc: '2.0', id: 2, method: 'ping', params: {} },
+  ];
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${requests.map(JSON.stringify).join('\n')}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const responses = run.stdout.trim().split(/\r?\n/u).map(JSON.parse);
+  assert.equal(responses[0].id, 2, run.stdout);
+  const supervised = responses.find((entry) => entry.id === 1).result;
+  assert.match(supervised.content[0].text, /^OK\|calls=1/u);
+  assert.match(supervised.content[0].text, /\|wait=internal\|polls=0\|ms=\d+\|model=0$/u);
+  assert.equal(supervised.structuredContent.modelPolls, 0);
+  assert.ok(supervised.structuredContent.waitedMilliseconds >= 100);
+  assert.ok(Buffer.byteLength(supervised.content[0].text, 'utf8') <= 256);
+});
+
+test('MCP supervise preserves an intelligent Luna ticket after wait proofs are added', () => {
+  const request = {
+    jsonrpc: '2.0', id: 1, method: 'tools/call',
+    params: { name: 'supervise', arguments: { operation: 'read', argument: 'scripts/kernel.mjs 1 200', cwd: process.cwd(), timeoutSeconds: 5, semantic: true } },
+  };
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const result = JSON.parse(run.stdout.trim()).result;
+  const match = /\|route=luna\|effort=high\|ticket=([A-Za-z0-9_-]{16})\|model=0$/u.exec(result.content[0].text);
+  assert.ok(match, result.content[0].text);
+  assert.equal(result.structuredContent.modelPolls, 0);
+  try {
+    const ticket = readAdaptiveTicket(match[1]);
+    assert.match(ticket.canonical, /\|wait=internal\|polls=0\|ms=\d+$/u);
+  } finally {
+    removeAdaptiveTicket(match[1]);
+  }
+});
+
+test('MCP background job lets another operation finish before one final wait', () => {
+  const requests = [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'job_start', arguments: { operation: 'bench', argument: 'benchmarks/supervise-wait.mjs 750', cwd: process.cwd(), timeoutSeconds: 5 } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'job_wait', arguments: { job: 'PLACEHOLDER_HANDLE', timeoutSeconds: 5 } } },
+  ];
+
+  const start = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(requests[0])}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+  const started = JSON.parse(start.stdout.trim()).result;
+  const handle = started.structuredContent.job;
+  assert.match(started.content[0].text, /\|background=1\|polls=0\|model=0$/u);
+
+  const followup = [
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'job_wait', arguments: { job: handle, timeoutSeconds: 5 } } },
+    { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'observe', arguments: { operation: 'read', argument: 'package.json 1 2', cwd: process.cwd(), adaptive: false } } },
+  ];
+  const wait = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${followup.map(JSON.stringify).join('\n')}\n`, encoding: 'utf8', timeout: 10000 });
+  try {
+    assert.equal(wait.status, 0, wait.stderr || wait.stdout);
+    const responses = wait.stdout.trim().split(/\r?\n/u).map(JSON.parse);
+    assert.equal(responses[0].id, 4, wait.stdout);
+    const completed = responses.find((entry) => entry.id === 3).result;
+    assert.match(completed.content[0].text, /^OK\|calls=1/u);
+    assert.match(completed.content[0].text, /\|background=1\|job=[A-Za-z0-9_-]{16}\|polls=0\|waitMs=\d+\|model=0$/u);
+    assert.equal(completed.structuredContent.status, 'completed');
+    assert.equal(completed.structuredContent.modelPolls, 0);
+    assert.ok(Buffer.byteLength(completed.content[0].text, 'utf8') <= 256);
+  } finally {
+    try { unlinkSync(join(JOB_DIRECTORY, `${handle}.json`)); } catch { /* cleanup best effort */ }
+  }
 });
 
 test('MCP adaptive context and acceptance bridge one Desktop Luna ticket', () => {

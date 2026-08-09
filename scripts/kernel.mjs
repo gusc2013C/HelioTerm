@@ -1,13 +1,15 @@
-import { execFile } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFile, spawn, spawnSync } from 'node:child_process';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
-import { measureTokenSavings } from './token-savings.mjs';
+import { measureTokenSavings, measureTokenSavingsFromBytes } from './token-savings.mjs';
 import { boundedAdaptiveEvidence } from './adaptive-channel.mjs';
+import { runObserver } from './observer.mjs';
 
 const execFileAsync = promisify(execFile);
-const observer = fileURLToPath(new URL('./observer.mjs', import.meta.url));
+export const INTERNAL_OBSERVER = 'helioterm:observer';
+export const DEFAULT_COMMAND_TIMEOUT_MILLISECONDS = 240_000;
+export const MAX_COMMAND_TIMEOUT_MILLISECONDS = 12 * 60 * 60 * 1000;
 export const OPERATIONS = new Set(['test', 'pytest', 'build', 'git', 'search', 'files', 'bench', 'process', 'read', 'list', 'json', 'stat', 'check', 'deps', 'version']);
 const READ_ONLY_GIT = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'grep', 'describe']);
 const PYTHON_CHECK_MODULES = new Set(['pytest', 'unittest', 'mypy', 'ruff', 'pyright']);
@@ -47,13 +49,26 @@ export function parseArguments(value) {
   return result;
 }
 
-function filesDirectory(argument) {
+function containedPathArgument(value, cwd = null) {
+  relativePathArgument(value);
+  if (!cwd) return value;
+  const root = realpathSync(resolve(cwd));
+  const candidate = resolve(root, value);
+  if (!existsSync(candidate)) return value;
+  const target = realpathSync(candidate);
+  const fromRoot = relative(root, target);
+  if (fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) throw new Error('path must stay inside the working directory');
+  return value;
+}
+
+function filesDirectory(argument, cwd = null) {
   const args = parseArguments(argument);
   if (args.length !== 1) throw new Error('files requires exactly one directory argument');
   const [directory] = args;
   if (!directory || directory.startsWith('-')) throw new Error('files requires a repo-relative directory');
   if (ABSOLUTE_PREFIX.test(directory) || WINDOWS_DRIVE.test(directory)) throw new Error('files rejects absolute paths');
   if (directory.split(/[\\/]+/u).includes('..')) throw new Error('files rejects parent traversal');
+  containedPathArgument(directory, cwd);
   return directory;
 }
 
@@ -85,7 +100,7 @@ function observerArguments(operation, args) {
     if (args.length < 1 || args.length > 16) throw new Error('stat requires 1..16 paths');
     args.forEach(relativePathArgument);
   }
-  return { file: process.execPath, args: [observer, operation, ...args] };
+  return { file: INTERNAL_OBSERVER, args: [operation, ...args] };
 }
 
 function npmCommand(args) {
@@ -103,8 +118,15 @@ function executableCommand(tool, args) {
 }
 
 function safePackageScript(args) {
-  if (args[0] === 'test') return true;
-  return args[0] === 'run' && /^(?:test|lint|check|typecheck|build|verify|preflight|format(?::check)?)(?::[A-Za-z0-9_.-]+)*$/iu.test(args[1] ?? '');
+  if (args[0] === 'test') return args.length === 1;
+  return args.length === 2
+    && args[0] === 'run'
+    && /^(?:test|lint|check|typecheck|build|verify|preflight|format(?::check)?)(?::[A-Za-z0-9_.-]+)*$/iu.test(args[1] ?? '');
+}
+
+function safeLifecycleGoals(args, allowed) {
+  const goals = args.filter((value) => !value.startsWith('-'));
+  return goals.length > 0 && goals.every((value) => allowed.has(value));
 }
 
 function safePythonCheck(args) {
@@ -127,8 +149,8 @@ function checkCommand(args) {
   else if (tool === 'cargo') pass = ['test', 'check', 'clippy', 'metadata', 'tree'].includes(toolArgs[0]) || (toolArgs[0] === 'fmt' && toolArgs.includes('--check'));
   else if (tool === 'go') pass = ['test', 'vet', 'list'].includes(toolArgs[0]);
   else if (tool === 'dotnet') pass = ['test', 'build'].includes(toolArgs[0]) || (toolArgs[0] === 'format' && toolArgs.includes('--verify-no-changes'));
-  else if (tool === 'mvn') pass = toolArgs.some((value) => ['test', 'verify', 'package'].includes(value));
-  else if (tool === 'gradle') pass = toolArgs.some((value) => ['test', 'check', 'build'].includes(value));
+  else if (tool === 'mvn') pass = safeLifecycleGoals(toolArgs, new Set(['test', 'verify', 'package']));
+  else if (tool === 'gradle') pass = safeLifecycleGoals(toolArgs, new Set(['test', 'check', 'build']));
   else if (tool === 'cmake') pass = toolArgs[0] === '--build';
   if (!pass) throw new Error('unsupported check command');
   const normalized = [...toolArgs];
@@ -162,32 +184,75 @@ function versionCommand(args) {
 const RIPGREP_OPTIONS_WITH_VALUES = new Set([
   '-A', '--after-context', '-B', '--before-context', '-C', '--context', '-E', '--encoding',
   '-f', '--file', '-g', '--glob', '--iglob', '-j', '--threads', '-m', '--max-count',
-  '-M', '--max-columns', '--max-depth', '--max-filesize', '--path-separator', '--pre',
-  '--pre-glob', '--replace', '--sort', '--sortr', '-t', '--type', '-T', '--type-not',
+  '-M', '--max-columns', '--max-depth', '--max-filesize', '--path-separator',
+  '--replace', '--sort', '--sortr', '-t', '--type', '-T', '--type-not',
   '--type-add', '--type-clear',
 ]);
+const RIPGREP_PATTERN_OPTIONS = new Set(['-e', '--regexp', '-f', '--file']);
+const RIPGREP_SAFE_FLAGS = new Set([
+  '--binary', '--case-sensitive', '--column', '--count', '--count-matches', '--crlf',
+  '--files-with-matches', '--files-without-match', '--fixed-strings', '--heading', '--hidden',
+  '--ignore-case', '--invert-match', '--json', '--line-number', '--line-regexp', '--multiline',
+  '--multiline-dotall', '--no-heading', '--no-ignore', '--no-ignore-vcs', '--no-line-number',
+  '--only-matching', '--pcre2', '--smart-case', '--stats', '--text', '--trim', '--word-regexp',
+  '-a', '-c', '-F', '-i', '-L', '-l', '-n', '-o', '-P', '-s', '-S', '-U', '-v', '-w', '-x',
+]);
 
-function searchCommand(args) {
+function parseRipgrepOption(args, index, cwd) {
+  const value = args[index];
+  const equals = value.indexOf('=');
+  const option = equals === -1 ? value : value.slice(0, equals);
+  if (RIPGREP_SAFE_FLAGS.has(option) || /^-[acFiLlnoPsSUvwx]+$/u.test(option)) {
+    if (equals !== -1) throw new Error(`search flag does not take a value: ${option}`);
+    return { next: index + 1, pattern: false };
+  }
+  if (!RIPGREP_OPTIONS_WITH_VALUES.has(option) && !RIPGREP_PATTERN_OPTIONS.has(option)) {
+    throw new Error(`unsupported search option: ${option}`);
+  }
+  const optionValue = equals === -1 ? args[index + 1] : value.slice(equals + 1);
+  if (!optionValue) throw new Error(`search option requires a value: ${option}`);
+  if (option === '-f' || option === '--file') containedPathArgument(optionValue, cwd);
+  return { next: equals === -1 ? index + 2 : index + 1, pattern: RIPGREP_PATTERN_OPTIONS.has(option) };
+}
+
+function searchCommand(args, cwd = null) {
   let patternSeen = false;
   let pathSeen = false;
-  let optionValue = false;
   let positionalOnly = false;
 
-  for (const value of args) {
-    if (optionValue) { optionValue = false; continue; }
-    if (!positionalOnly && value === '--') { positionalOnly = true; continue; }
+  for (let index = 0; index < args.length;) {
+    const value = args[index];
+    if (!positionalOnly && value === '--') { positionalOnly = true; index += 1; continue; }
     if (!positionalOnly && value.startsWith('-') && value !== '-') {
-      const [option] = value.split('=', 1);
-      if (!value.includes('=') && RIPGREP_OPTIONS_WITH_VALUES.has(option)) optionValue = true;
-      if (option === '-e' || option === '--regexp' || option === '-f' || option === '--file') patternSeen = true;
+      const parsed = parseRipgrepOption(args, index, cwd);
+      if (parsed.pattern) patternSeen = true;
+      index = parsed.next;
       continue;
     }
     if (!patternSeen) patternSeen = true;
-    else pathSeen = true;
+    else { containedPathArgument(value, cwd); pathSeen = true; }
+    index += 1;
   }
 
   if (!patternSeen) throw new Error('search requires a pattern');
-  return { file: 'rg', args: pathSeen ? args : [...args, '.'] };
+  return { file: 'rg', args: ['--no-config', ...(pathSeen ? args : [...args, '.'])] };
+}
+
+function safeBenchmark(args, cwd = null) {
+  const [script, ...scriptArgs] = args;
+  containedPathArgument(script, cwd);
+  const normalized = script.replace(/\\/gu, '/');
+  const permitted = /^benchmarks\/[A-Za-z0-9_.\/-]+\.(?:mjs|js)$/u.test(normalized)
+    || ['scripts/preflight.mjs', 'scripts/estimate-bytes.mjs'].includes(normalized);
+  const unsafeFlag = scriptArgs.some((value) => /^(?:-o|--(?:delete|force|in-place|output|remove|write))(?:=|$)/iu.test(value));
+  if (!permitted || unsafeFlag) throw new Error('bench requires a read-only benchmark entry point');
+}
+
+function safeGitArguments(args) {
+  if (!READ_ONLY_GIT.has(args[0])) throw new Error('Unsupported mutating git operation');
+  const unsafe = args.slice(1).some((value) => /^(?:-c|--(?:config|exec-path|ext-diff|no-index|output|paginate|textconv))(?:=|$)/iu.test(value)
+    || /^(?:-O|--open-files-in-pager)(?:=|$)/iu.test(value));
+  if (unsafe) throw new Error('Unsupported git execution or output option');
 }
 
 function processCommand(args) {
@@ -211,22 +276,29 @@ function processCommand(args) {
   return { file: 'pgrep', args: ['-a', '-x', query] };
 }
 
-export function commandFor(operation, argument) {
+export function commandFor(operation, argument, cwd = null) {
   if (!OPERATIONS.has(operation)) throw new Error(`Unsupported operation: ${operation}`);
   const args = parseArguments(argument);
   if (!args.length) throw new Error('Argument is empty');
   if (operation === 'test') return { file: process.execPath, args: ['--test', ...args] };
   if (operation === 'pytest') return { file: process.platform === 'win32' ? 'py.exe' : 'python3', args: ['-m', 'pytest', '-p', 'no:cacheprovider', ...args] };
-  if (operation === 'bench') return { file: process.execPath, args };
+  if (operation === 'bench') {
+    safeBenchmark(args, cwd);
+    return { file: process.execPath, args };
+  }
   if (operation === 'build') {
+    if (!safePackageScript(['run', ...args])) throw new Error('build requires one allowlisted package script');
     return npmCommand(['run', ...args]);
   }
   if (operation === 'git') {
-    if (!READ_ONLY_GIT.has(args[0])) throw new Error('Unsupported mutating git operation');
-    return { file: 'git', args };
+    safeGitArguments(args);
+    const normalized = ['diff', 'log', 'show'].includes(args[0])
+      ? [args[0], '--no-ext-diff', '--no-textconv', ...args.slice(1)]
+      : args;
+    return { file: 'git', args: normalized };
   }
-  if (operation === 'search') return searchCommand(args);
-  if (operation === 'files') return { file: 'rg', args: ['--files', filesDirectory(argument)] };
+  if (operation === 'search') return searchCommand(args, cwd);
+  if (operation === 'files') return { file: 'rg', args: ['--no-config', '--files', filesDirectory(argument, cwd)] };
   if (['read', 'list', 'json', 'stat'].includes(operation)) return observerArguments(operation, args);
   if (operation === 'check') return checkCommand(args);
   if (operation === 'deps') return dependencyCommand(args);
@@ -381,9 +453,9 @@ function evidenceText(text, operation, command, exitCode) {
   return text;
 }
 
-function compact({ exitCode, stdout, stderr, operation, command, cwd }) {
+function compact({ exitCode, stdout, stderr, operation, command, cwd, rawBytesOverride = null }) {
   const text = `${stdout ?? ''}${stderr ?? ''}`;
-  const rawBytes = Buffer.byteLength(text, 'utf8');
+  const rawBytes = rawBytesOverride ?? Buffer.byteLength(text, 'utf8');
   const factText = operation === 'git' && command.args?.[0] === 'diff' && command.args.includes('--check') ? (stdout ?? '') : text;
   const semantic = semanticFacts(factText, operation, command);
   const facts = operation === 'check' ? `check=${exitCode === 0 ? 'pass' : 'fail'}|${semantic}` : semantic;
@@ -402,17 +474,32 @@ function compact({ exitCode, stdout, stderr, operation, command, cwd }) {
   const compactText = withSuffix(prefix, `|raw=${rawBytes}`, 220);
   return {
     text: compactText,
-    savings: measureTokenSavings({ rawText: text, compactText }),
+    savings: rawBytesOverride === null
+      ? measureTokenSavings({ rawText: text, compactText })
+      : measureTokenSavingsFromBytes({ rawBytes, compactText }),
     adaptiveEvidence: boundedAdaptiveEvidence(text, cwd),
   };
 }
 
-export async function runCommand({ command, cwd, operation = null }) {
+function commandTimeout(value) {
+  const timeout = value ?? DEFAULT_COMMAND_TIMEOUT_MILLISECONDS;
+  if (!Number.isInteger(timeout) || timeout < 1 || timeout > MAX_COMMAND_TIMEOUT_MILLISECONDS) {
+    throw new Error(`timeoutMilliseconds must be 1..${MAX_COMMAND_TIMEOUT_MILLISECONDS}`);
+  }
+  return timeout;
+}
+
+export async function runCommand({ command, cwd, operation = null, timeoutMilliseconds }) {
   try {
+    const timeout = commandTimeout(timeoutMilliseconds);
+    if (command.file === INTERNAL_OBSERVER) {
+      const stdout = runObserver({ operation: command.args[0], args: command.args.slice(1), cwd });
+      return { ...compact({ exitCode: 0, stdout, stderr: '', operation, command, cwd }), command, operation };
+    }
     const childEnvironment = { ...process.env };
     delete childEnvironment.NODE_TEST_CONTEXT;
     if (operation === 'pytest' || operation === 'check') childEnvironment.PYTHONDONTWRITEBYTECODE = '1';
-    const { stdout, stderr } = await execFileAsync(command.file, command.args, { cwd, env: childEnvironment, windowsHide: true, timeout: 240000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
+    const { stdout, stderr } = await execFileAsync(command.file, command.args, { cwd, env: childEnvironment, windowsHide: true, timeout, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
     return { ...compact({ exitCode: 0, stdout, stderr, operation, command, cwd }), command, operation };
   } catch (error) {
     const exitCode = Number.isInteger(error.code) ? error.code : 1;
@@ -426,7 +513,113 @@ export async function runCommand({ command, cwd, operation = null }) {
   }
 }
 
-export async function runOperation({ operation, argument, cwd }) {
+const SUPERVISED_CAPTURE_BYTES = 2 * 1024 * 1024;
+
+function supervisedEnvironment(operation) {
+  const childEnvironment = { ...process.env };
+  delete childEnvironment.NODE_TEST_CONTEXT;
+  if (operation === 'pytest' || operation === 'check') childEnvironment.PYTHONDONTWRITEBYTECODE = '1';
+  return childEnvironment;
+}
+
+function stopProcessTree(child) {
+  if (!child.pid) return;
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    } else process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    try { child.kill('SIGKILL'); } catch { /* process already exited */ }
+  }
+}
+
+export async function runSupervisedOperation({ operation, argument, cwd, timeoutMilliseconds }) {
   assertWorkingDirectory(cwd);
-  return runCommand({ command: commandFor(operation, argument), cwd, operation });
+  const command = commandFor(operation, argument, cwd);
+  const timeout = commandTimeout(timeoutMilliseconds);
+  const started = Date.now();
+  if (command.file === INTERNAL_OBSERVER) {
+    const result = await runCommand({ command, cwd, operation, timeoutMilliseconds: timeout });
+    return { ...result, durationMilliseconds: Date.now() - started, modelPolls: 0 };
+  }
+
+  const result = await new Promise((resolveResult) => {
+    const chunks = [];
+    let retainedBytes = 0;
+    let rawBytes = 0;
+    let timedOut = false;
+    let settled = false;
+
+    const append = (value) => {
+      let chunk = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
+      rawBytes += chunk.length;
+      if (chunk.length >= SUPERVISED_CAPTURE_BYTES) {
+        chunk = chunk.subarray(chunk.length - SUPERVISED_CAPTURE_BYTES);
+        chunks.splice(0, chunks.length, chunk);
+        retainedBytes = chunk.length;
+        return;
+      }
+      chunks.push(chunk);
+      retainedBytes += chunk.length;
+      while (retainedBytes > SUPERVISED_CAPTURE_BYTES && chunks.length) {
+        const excess = retainedBytes - SUPERVISED_CAPTURE_BYTES;
+        const first = chunks[0];
+        if (first.length <= excess) {
+          chunks.shift();
+          retainedBytes -= first.length;
+        } else {
+          chunks[0] = first.subarray(excess);
+          retainedBytes -= excess;
+        }
+      }
+    };
+
+    const finish = (exitCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(killFallback);
+      const captured = Buffer.concat(chunks, retainedBytes).toString('utf8');
+      resolveResult({ exitCode, captured, rawBytes });
+    };
+
+    const child = spawn(command.file, command.args, {
+      cwd,
+      env: supervisedEnvironment(operation),
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout?.on('data', append);
+    child.stderr?.on('data', append);
+    child.on('error', (error) => { append(`${error.message}\n`); finish(1); });
+    child.on('close', (code) => finish(timedOut ? 124 : (Number.isInteger(code) ? code : 1)));
+
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      append(`HelioTerm timeout after ${timeout}ms\n`);
+      stopProcessTree(child);
+    }, timeout);
+    timeoutTimer.unref?.();
+    const killFallback = setTimeout(() => {
+      if (timedOut) finish(124);
+    }, timeout + 10_000);
+    killFallback.unref?.();
+  });
+
+  const compacted = compact({
+    exitCode: result.exitCode,
+    stdout: result.captured,
+    stderr: '',
+    operation,
+    command,
+    cwd,
+    rawBytesOverride: result.rawBytes,
+  });
+  return { ...compacted, command, operation, durationMilliseconds: Date.now() - started, modelPolls: 0 };
+}
+
+export async function runOperation({ operation, argument, cwd, timeoutMilliseconds }) {
+  assertWorkingDirectory(cwd);
+  return runCommand({ command: commandFor(operation, argument, cwd), cwd, operation, timeoutMilliseconds });
 }

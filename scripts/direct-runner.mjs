@@ -85,7 +85,7 @@ export async function runDirectBatch({ requests, cwd, adaptive = false, semantic
   const started = performance.now();
   try {
     assertWorkingDirectory(cwd);
-    const prepared = parsed.map((entry) => ({ operation: entry.operation, command: commandFor(entry.operation, entry.argument) }));
+    const prepared = parsed.map((entry) => ({ operation: entry.operation, command: commandFor(entry.operation, entry.argument, cwd) }));
     const results = await executePrepared(prepared, cwd);
     const elapsedMs = Math.max(0, Math.round(performance.now() - started));
     if (results.length === 1) {

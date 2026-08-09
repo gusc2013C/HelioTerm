@@ -27,6 +27,17 @@ export function measureTokenSavings({ rawText = '', compactText = '' }) {
   });
 }
 
+export function measureTokenSavingsFromBytes({ rawBytes, compactText = '' }) {
+  if (!Number.isSafeInteger(rawBytes) || rawBytes < 0) throw new Error('rawBytes must be a non-negative safe integer');
+  const compactBytes = Buffer.byteLength(compactText, 'utf8');
+  return measurement({
+    rawBytes,
+    compactBytes,
+    rawEstimatedTokens: rawBytes === 0 ? 0 : Math.ceil(rawBytes / 4),
+    compactEstimatedTokens: estimateTokens(compactText),
+  });
+}
+
 export function aggregateTokenSavings(entries, compactText) {
   const measurements = Array.isArray(entries) ? entries.filter(Boolean) : [];
   return measurement({

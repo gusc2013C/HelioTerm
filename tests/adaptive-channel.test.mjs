@@ -70,6 +70,17 @@ test('large multi-failure evidence deterministically selects xhigh', () => {
   assert.equal(decision.effort, 'xhigh');
 });
 
+test('one repeated diagnostic pattern across modules stays on high', () => {
+  const failure = observed({
+    raw: Array.from({ length: 80 }, (_, index) => `ERROR fixture-${index}: assertion mismatch in src/module-${index % 8}/case-${index}.mjs`).join('\n'),
+  });
+  const decision = classifyAdaptiveCompression({ results: [failure] });
+  assert.equal(decision.useLuna, true);
+  assert.equal(decision.crossModule, true);
+  assert.equal(decision.complexFailure, false);
+  assert.equal(decision.effort, 'high');
+});
+
 test('status-only changes stay deterministic while real patches route to Luna', () => {
   const change = observed({
     text: 'OK|calls=1|changes=2|more=1|raw=4096',
@@ -147,6 +158,18 @@ test('deterministic acceptance preserves facts, bounds output, and measures cont
   assert.equal(rejected.reason, 'invalid-shape');
   assert.equal(rejected.text, `${rejectedTicket.canonical}|model=0`);
   assert.throws(() => readAdaptiveTicket(rejectedTicket.handle, { root, now: 2004 }), /ENOENT/u);
+
+  const transportTicket = createAdaptiveTicket({ canonical: observed().text, decision, root, now: 2004 });
+  const transport = acceptAdaptiveLunaResponse({
+    ticket: transportTicket.handle,
+    response: '{"note":"luna_context unavailable in this environment"}',
+    root,
+    now: 2005,
+  });
+  assert.equal(transport.accepted, false);
+  assert.equal(transport.reason, 'transport-note');
+  assert.equal(transport.text, `${transportTicket.canonical}|model=0`);
+  assert.throws(() => readAdaptiveTicket(transportTicket.handle, { root, now: 2006 }), /ENOENT/u);
 }));
 
 test('an accepted semantic note replaces a long rule sample instead of being clipped away', () => withTicketRoot((root) => {
@@ -175,6 +198,9 @@ test('expired tickets fail closed and session prompts carry only the opaque hand
   const prompt = desktopLunaTicketPrompt({ ticket: ticket.handle, readerPath: 'D:/code/HelioTerm/scripts/luna-ticket-reader.mjs' });
   assert.match(prompt, new RegExp(ticket.handle, 'u'));
   assert.match(prompt, /luna_context exactly once/u);
+  assert.match(prompt, /already the temporary HelioTerm Luna leaf/u);
+  assert.match(prompt, /never create, fork, list, read, send to, wait for, or archive any Codex task/u);
+  assert.match(prompt, /If evidence access fails, return \{"note":""\}/u);
   assert.match(prompt, /integrated-terminal call/u);
   assert.match(prompt, /not Codex CLI/u);
   assert.doesNotMatch(prompt, /failure detail/u);

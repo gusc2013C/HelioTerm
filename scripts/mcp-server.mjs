@@ -95,7 +95,7 @@ export const SAVINGS_TOOL = {
 export const LUNA_CONTEXT_TOOL = {
   name: 'luna_context',
   title: 'Read one adaptive Luna ticket',
-  description: 'For a temporary Desktop Luna task only: read canonical facts and bounded evidence for one opaque ticket. Uses no model and no shell.',
+  description: 'For an already-created temporary Desktop Luna leaf only: read canonical facts and bounded evidence for one opaque ticket. Call this directly; never create or wait for another task. Uses no model and no shell.',
   inputSchema: {
     type: 'object', additionalProperties: false, required: ['ticket'],
     properties: { ticket: { type: 'string', pattern: '^[A-Za-z0-9_-]{16}$' } },

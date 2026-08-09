@@ -27,6 +27,12 @@ export function composeLunaCompression({ canonical, note, material = true, maxBy
   if (/^(?:working tree has|there (?:are|is)|tests? (?:passed|failed)|changes? detected|存在|共有|测试通过|检测到)/u.test(lower)) {
     return { text: canonical, note: '', accepted: false, reason: 'generic-note' };
   }
+  if (/\bluna_context\b.{0,32}\b(?:unavailable|missing|not (?:available|found)|inaccessible)\b/u.test(lower)
+    || /^(?:the )?(?:mcp )?tool (?:is )?(?:unavailable|missing|not (?:available|found))/u.test(lower)
+    || /^(?:cannot|can't|unable to) (?:access|read) (?:the )?(?:context|evidence|ticket)/u.test(lower)
+    || /^no (?:context|evidence) (?:is )?(?:available|provided)/u.test(lower)) {
+    return { text: canonical, note: '', accepted: false, reason: 'transport-note' };
+  }
   if (/(?:\b(?:and|or|with|including)|以及|和|与|包括)$/iu.test(normalized)) {
     return { text: canonical, note: '', accepted: false, reason: 'incomplete-note' };
   }
@@ -71,12 +77,14 @@ export function desktopLunaTicketPrompt({ ticket, readerPath = null }) {
     ? `Call the HelioTerm MCP tool luna_context exactly once with ticket ${ticket}. If and only if that exact tool is unavailable, make one Desktop integrated-terminal call: node "${readerPath}" --ticket ${ticket}`
     : `Call the HelioTerm MCP tool luna_context exactly once with ticket ${ticket}.`;
   return [
-    'You are a temporary HelioTerm semantic compressor in Codex Desktop.',
+    'You are already the temporary HelioTerm Luna leaf in Codex Desktop.',
+    'Leaf guard: never create, fork, list, read, send to, wait for, or archive any Codex task. The parent owns task lifecycle and archival.',
     access,
     readerPath
       ? 'The fallback is a local evidence reader, not Codex CLI. Use no other terminal, shell, filesystem, web, model, or agent tool.'
       : 'Do not use a terminal, shell, filesystem tool, web tool, or any other model/agent.',
     'After reading the returned canonical facts and evidence, return only JSON matching {"note":"..."}.',
+    'If evidence access fails, return {"note":""}; never describe tool, context, ticket, or transport availability.',
     'Do not repeat status, counts, numbers, or the canonical line. Do not add Markdown or explanation.',
   ].join('\n');
 }

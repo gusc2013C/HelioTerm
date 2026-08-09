@@ -153,7 +153,7 @@ export function classifyAdaptiveCompression({ results, semantic = false } = {}) 
     diagnosticEvidence,
     complexFailure,
     crossModule,
-    effort: selectLunaEffort({ complexFailure, crossModule: materialFailure && crossModule, causalAnalysis }),
+    effort: selectLunaEffort({ complexFailure, causalAnalysis }),
     reason: materialFailure ? 'failure' : semanticGitPatch(entries.find((entry) => semanticGitPatch(entry)) ?? {}) ? 'patch' : semantic ? 'requested' : semanticScore > 0 ? 'semantic-output' : 'none',
     evidence,
   });

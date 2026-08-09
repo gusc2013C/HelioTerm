@@ -3,14 +3,14 @@
   "version": "0.1.1",
   "date": "2026-08-09",
   "source": {
-    "testsPassed": 84,
+    "testsPassed": 89,
     "preflightPassed": true,
     "gitDiffCheckPassed": true
   },
   "installedPlugin": {
     "baseVersion": "0.1.1",
     "cachebusterPolicy": "single codex timestamp suffix",
-    "testsPassed": 84,
+    "testsPassed": 89,
     "preflightPassed": true,
     "pluginValidationPassed": true,
     "pathlessSearchPassed": true,
@@ -41,6 +41,17 @@
     "semanticEvidenceFloorBytes": 768,
     "statusOnlyStaysRuleBased": true,
     "realPatchRoutesToLuna": true,
+    "temporaryLunaLeafGuard": true,
+    "singlePatternCrossModuleFailureEffort": "high",
+    "xhighPolicy": "multiple failures, at least 32 KiB complex failure, or at least 16 KiB cross-module patch causal analysis",
+    "desktopLeafProbe": {
+      "recursiveThreadLifecyclePlanned": false,
+      "firstTurnMilliseconds": 31449,
+      "lunaContextProjectedBeforeDesktopRestart": false,
+      "transportNoteRejectedByValidator": true,
+      "ticketConsumedWithRuleFallback": true
+    },
+    "mcpSchemaUpdateRequiresDesktopRestart": true,
     "repeatedEvidenceFixture": {
       "rawCommandOutputBytes": 7040,
       "consecutiveDuplicatesCollapsed": 179,
@@ -55,7 +66,19 @@
     "jobWaitCalls": 1,
     "modelPolls": 0,
     "otherMcpWorkCompletedWhileRunning": true,
-    "singleCallSuperviseResponsivePing": true
+    "singleCallSuperviseResponsivePing": true,
+    "fourWorkerConcurrencyPassed": true,
+    "deadlineExit124Passed": true,
+    "failedJobRoutesAfterFreshMcpProcess": true,
+    "launchingCacheDeletedWhileRunningPassed": true,
+    "realProjectBackground": {
+      "project": "Heliolune",
+      "testsPassed": 188,
+      "foregroundGitAndSearchCompletedFirst": true,
+      "workingTreeFactsUnchanged": true,
+      "jobWaitCalls": 1,
+      "modelPolls": 0
+    }
   },
   "securityBoundary": {
     "unknownPackageScriptRejected": true,
@@ -79,7 +102,9 @@
     "background commands blocking unrelated Codex work",
     "coarse Luna routing missing semantically valuable evidence",
     "unsafe execution flags crossing read-only tool metadata",
-    "running MCP observer broken by plugin cache replacement"
+    "running MCP observer broken by plugin cache replacement",
+    "temporary Luna considering recursive task creation",
+    "single repeated cross-module diagnostic unnecessarily selecting xhigh"
   ],
   "result": "pass",
   "claim": "No blocking usage issue was found in the tested release scope."

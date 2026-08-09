@@ -13,12 +13,20 @@ test('code owns canonical facts and accepts a semantic-only Luna note', () => {
   });
   assert.equal(result.accepted, true);
   assert.equal(result.text, 'OK|pass=34|fail=0|changes=30|note=GUI and project-map files are untracked');
+  const projectDiagnostic = composeLunaCompression({
+    canonical: 'FAIL|exit=1',
+    note: 'luna_context response validation rejects malformed notes',
+  });
+  assert.equal(projectDiagnostic.accepted, true);
 });
 
 test('generic, missing, and recounted Luna notes fail closed to canonical facts', () => {
   for (const [note, reason] of [
     ['', 'missing-note'],
     ['working tree has many changes', 'generic-note'],
+    ['luna_context unavailable in this environment', 'transport-note'],
+    ['unable to access the evidence', 'transport-note'],
+    ['no context available', 'transport-note'],
     ['GUI has 30 changed files', 'recounted-fact'],
     ['scripts, docs, and', 'incomplete-note'],
   ]) {

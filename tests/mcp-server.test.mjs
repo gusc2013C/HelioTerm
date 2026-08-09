@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, unlinkSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { createAdaptiveTicket, readAdaptiveTicket, removeAdaptiveTicket } from '../scripts/adaptive-channel.mjs';
-import { JOB_DIRECTORY } from '../scripts/job-manager.mjs';
+import { JOB_DIRECTORY, readBackgroundJob, startBackgroundJob, waitBackgroundJob } from '../scripts/job-manager.mjs';
 import {
   commandFor,
   JOB_START_TOOL,
@@ -122,6 +124,8 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(TOOLS[6], LUNA_CONTEXT_TOOL);
   assert.equal(TOOLS[7], LUNA_ACCEPT_TOOL);
   assert.equal(LUNA_CONTEXT_TOOL.annotations.readOnlyHint, true);
+  assert.match(LUNA_CONTEXT_TOOL.description, /already-created temporary Desktop Luna leaf/u);
+  assert.match(LUNA_CONTEXT_TOOL.description, /never create or wait for another task/u);
   assert.equal(LUNA_ACCEPT_TOOL.annotations.readOnlyHint, false);
   assert.equal(LUNA_ACCEPT_TOOL.annotations.destructiveHint, true);
   assert.equal(LUNA_ACCEPT_TOOL.annotations.idempotentHint, false);
@@ -196,6 +200,107 @@ test('MCP background job lets another operation finish before one final wait', (
     assert.equal(completed.structuredContent.modelPolls, 0);
     assert.ok(Buffer.byteLength(completed.content[0].text, 'utf8') <= 256);
   } finally {
+    try { unlinkSync(join(JOB_DIRECTORY, `${handle}.json`)); } catch { /* cleanup best effort */ }
+  }
+});
+
+test('four background workers complete concurrently with unique persistent handles', async () => {
+  const jobs = [100, 140, 180, 220].map((milliseconds) => startBackgroundJob({
+    operation: 'bench',
+    argument: `benchmarks/supervise-wait.mjs ${milliseconds}`,
+    cwd: process.cwd(),
+    timeoutMilliseconds: 5000,
+  }));
+  try {
+    assert.equal(new Set(jobs.map((job) => job.handle)).size, jobs.length);
+    const started = Date.now();
+    const completed = await Promise.all(jobs.map((job) => waitBackgroundJob({ handle: job.handle, timeoutMilliseconds: 5000 })));
+    const elapsed = Date.now() - started;
+    assert.ok(completed.every((entry) => entry.completed && entry.state.status === 'completed'), JSON.stringify(completed));
+    assert.ok(completed.every((entry) => entry.state.result?.modelPolls === 0), JSON.stringify(completed));
+    assert.ok(elapsed < 1500, `background workers appear serialized: ${elapsed}ms`);
+  } finally {
+    for (const job of jobs) {
+      try { unlinkSync(join(JOB_DIRECTORY, `${job.handle}.json`)); } catch { /* cleanup best effort */ }
+    }
+  }
+});
+
+test('background deadline kills the command tree and persists exit 124', async () => {
+  const job = startBackgroundJob({
+    operation: 'bench',
+    argument: 'benchmarks/supervise-wait.mjs 2000',
+    cwd: process.cwd(),
+    timeoutMilliseconds: 200,
+  });
+  try {
+    const completed = await waitBackgroundJob({ handle: job.handle, timeoutMilliseconds: 5000 });
+    assert.equal(completed.completed, true);
+    assert.equal(completed.state.status, 'failed');
+    assert.match(completed.state.result.text, /^FAIL\|calls=1\|exit=124/u);
+    assert.equal(completed.state.result.modelPolls, 0);
+  } finally {
+    try { unlinkSync(join(JOB_DIRECTORY, `${job.handle}.json`)); } catch { /* cleanup best effort */ }
+  }
+});
+
+test('running worker survives deletion of the plugin cache that launched it', async () => {
+  const cache = mkdtempSync(join(tmpdir(), 'helioterm-cache-replacement-'));
+  const copiedScripts = join(cache, 'scripts');
+  cpSync('scripts', copiedScripts, { recursive: true });
+  const manager = await import(`${pathToFileURL(join(copiedScripts, 'job-manager.mjs')).href}?cache=${Date.now()}`);
+  const job = manager.startBackgroundJob({
+    operation: 'bench',
+    argument: 'benchmarks/supervise-wait.mjs 500',
+    cwd: process.cwd(),
+    timeoutMilliseconds: 5000,
+  });
+  try {
+    const deadline = Date.now() + 5000;
+    while (readBackgroundJob(job.handle).status !== 'running' && Date.now() < deadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
+    assert.equal(readBackgroundJob(job.handle).status, 'running');
+    rmSync(cache, { recursive: true, force: true });
+    const completed = await waitBackgroundJob({ handle: job.handle, timeoutMilliseconds: 5000 });
+    assert.equal(completed.completed, true);
+    assert.equal(completed.state.status, 'completed');
+    assert.equal(completed.state.result.modelPolls, 0);
+  } finally {
+    rmSync(cache, { recursive: true, force: true });
+    try { unlinkSync(join(JOB_DIRECTORY, `${job.handle}.json`)); } catch { /* cleanup best effort */ }
+  }
+});
+
+test('failed background result routes to Luna after collection in a fresh MCP process', () => {
+  const startRequest = {
+    jsonrpc: '2.0', id: 1, method: 'tools/call',
+    params: { name: 'job_start', arguments: { operation: 'bench', argument: 'benchmarks/supervise-failure.mjs 80', cwd: process.cwd(), timeoutSeconds: 5 } },
+  };
+  const start = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(startRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+  const handle = JSON.parse(start.stdout.trim()).result.structuredContent.job;
+  let ticket = null;
+  try {
+    const waitRequest = {
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'job_wait', arguments: { job: handle, timeoutSeconds: 5, adaptive: true } },
+    };
+    const wait = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(waitRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+    assert.equal(wait.status, 0, wait.stderr || wait.stdout);
+    const result = JSON.parse(wait.stdout.trim()).result;
+    const match = /\|route=luna\|effort=high\|ticket=([A-Za-z0-9_-]{16})\|model=0$/u.exec(result.content[0].text);
+    assert.ok(match, result.content[0].text);
+    ticket = match[1];
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.status, 'failed');
+    assert.equal(result.structuredContent.modelPolls, 0);
+    const record = readAdaptiveTicket(ticket);
+    assert.match(record.canonical, /^FAIL\|calls=1\|exit=7/u);
+    assert.match(record.canonical, /\|background=1\|job=[A-Za-z0-9_-]{16}\|polls=0\|waitMs=\d+$/u);
+    assert.match(record.evidence, /fixture-79/u);
+  } finally {
+    if (ticket) removeAdaptiveTicket(ticket);
     try { unlinkSync(join(JOB_DIRECTORY, `${handle}.json`)); } catch { /* cleanup best effort */ }
   }
 });

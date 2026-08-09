@@ -5,6 +5,10 @@ description: "Use by default for bounded and long-running terminal work in softw
 
 # HelioTerm
 
+## Temporary Luna leaf guard
+
+If the current input is a `codex_delegation` that identifies this task as the temporary HelioTerm semantic compressor, or directly asks this task to read one `luna_context` ticket and return `{"note":"..."}`, this task is already the Luna leaf. Call `luna_context` exactly once and return only the requested JSON. Never call `create_thread`, `fork_thread`, `list_threads`, `read_thread`, `send_message_to_thread`, `wait_threads`, `handoff_thread`, `set_thread_archived`, or any agent/subagent tool. The parent task alone owns validation, reuse, and archival. This guard takes precedence over the parent lifecycle below and prevents recursive Luna creation.
+
 Resolve `<root>` from this file. The ordinary rule path uses no child model. Invoke once:
 
 `node <root>/scripts/direct-runner.mjs --cwd <project> --request "T|operation|argument"`
@@ -41,10 +45,10 @@ Keep the direct rule compressor for complete counts, status, stat, version, depe
 
 When a result contains `route=luna`, use this Desktop-only lifecycle:
 
-1. If this parent task has no active HelioTerm Luna task, call the Codex Desktop `create_thread` tool with target `{type:"projectless", directoryName:"helioterm-luna-temp"}`, model `gpt-5.6-luna`, and the returned effort (`high` normally, `xhigh` only when requested). The prompt must tell Luna to call the HelioTerm `luna_context` MCP tool exactly once with the opaque ticket and then return only `{"note":"..."}`. Do not put raw evidence in the create prompt. If the newly installed MCP tool is not projected until Desktop restarts, allow exactly one fallback call from that Luna task's Desktop integrated terminal: `node "<root>/scripts/luna-ticket-reader.mjs" --ticket <ticket>`. This is a local evidence reader, never Codex CLI.
-2. Wait for the task through `wait_threads`. For later tickets in the same bounded burst, use `send_message_to_thread` on the same task so its context can be cached. Reuse it for at most eight Luna turns, then archive and rotate.
+1. If this parent task has no active HelioTerm Luna task, call the Codex Desktop `create_thread` tool with target `{type:"projectless", directoryName:"helioterm-luna-temp"}`, model `gpt-5.6-luna`, and the returned effort (`high` normally, `xhigh` only when requested). The prompt must state that the task is already the Luna leaf, forbid every Codex task/agent lifecycle tool, tell it to call HelioTerm `luna_context` exactly once with the opaque ticket, and then return only `{"note":"..."}`. Do not put raw evidence in the create prompt. If the newly installed MCP tool is not projected until Desktop restarts, allow exactly one fallback call from that Luna task's Desktop integrated terminal: `node "<root>/scripts/luna-ticket-reader.mjs" --ticket <ticket>`. This is a local evidence reader, never Codex CLI. If both access paths fail, Luna must return `{"note":""}` rather than an availability explanation.
+2. Wait for the task through `wait_threads`. For later tickets in the same bounded parent workload or user turn, use `send_message_to_thread` on the same task so its initialized context can be cached. Reuse it for at most eight Luna turns, then archive and rotate.
 3. Pass Luna's exact JSON text and the ticket to the HelioTerm `luna_accept` MCP tool. Code owns canonical status, counts, byte limits, and acceptance; validation consumes the one-use local ticket whether the note is accepted or falls back to rule-only facts. If the newly installed accept tool is not yet projected, run the source `luna-ticket-acceptor.mjs` locally with the response encoded as base64url; this helper invokes no model. If Luna times out, fails, or returns an invalid response, validate `{}` so the stored rule-only canonical fallback is returned and the ticket is removed.
-4. In every completion path—including success, rejection, timeout, cancellation, tool failure, and the eighth turn—call the Desktop `set_thread_archived` tool. Never leave a temporary Luna task open after the parent workload or user turn ends.
+4. At the end of the parent workload or user turn, and immediately on rejection, timeout, cancellation, tool failure, or the eighth turn, call the Desktop `set_thread_archived` tool. Do not archive between successful tickets when more work in the same bounded burst is already planned. Never leave a temporary Luna task open after the parent workload or user turn ends.
 
 Never start `codex exec`, `codex app-server`, or another Codex CLI process for Luna. Never use an API key for this channel. Desktop coordination does not expose provider token usage, so report only deterministic content-byte metrics returned by `luna_accept`, plus available duration; never infer billing tokens.
 

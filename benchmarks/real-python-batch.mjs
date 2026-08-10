@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { validateRequest } from '../scripts/firewall.mjs';
 import { commandFor } from '../scripts/kernel.mjs';
+import { TOKEN_ESTIMATOR } from '../scripts/token-savings.mjs';
 
 const runner = fileURLToPath(new URL('../scripts/direct-runner.mjs', import.meta.url));
 
@@ -72,7 +73,7 @@ async function plainRun(requests, cwd) {
 }
 
 async function heliotermRun(requests, cwd) {
-  const args = [runner, '--cwd', cwd];
+  const args = [runner, '--no-adaptive', '--cwd', cwd];
   for (const request of requests) args.push('--request', request);
   const result = await run(process.execPath, args, cwd);
   return {
@@ -118,9 +119,13 @@ async function main(argv = process.argv.slice(2)) {
   const heliotermMedian = median(helioterm.map((entry) => entry.elapsedMs));
   const plainBytes = median(plain.map((entry) => entry.outputBytes));
   const heliotermBytes = median(helioterm.map((entry) => entry.outputBytes));
+  const plainEstimatedTokens = Math.ceil(plainBytes / 4);
+  const heliotermEstimatedTokens = Math.ceil(heliotermBytes / 4);
   const report = {
     project: basename(cwd),
     projectPath: cwd,
+    scope: 'terminal-observation-content-only',
+    estimator: TOKEN_ESTIMATOR,
     runs,
     requests,
     pass: plain.every((entry) => entry.pass) && helioterm.every((entry) => entry.pass),
@@ -131,6 +136,9 @@ async function main(argv = process.argv.slice(2)) {
     latencyDifferencePercent: ((heliotermMedian / plainMedian) - 1) * 100,
     plainOutputBytes: plainBytes,
     heliotermOutputBytes: heliotermBytes,
+    plainEstimatedTokens,
+    heliotermEstimatedTokens,
+    savedEstimatedTokens: plainEstimatedTokens - heliotermEstimatedTokens,
     outputReductionPercent: (1 - (heliotermBytes / plainBytes)) * 100,
     compactResult: helioterm.at(-1).result,
   };

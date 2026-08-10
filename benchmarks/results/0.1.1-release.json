@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "HELIOTERM_RELEASE_V1",
+  "version": "0.1.1",
+  "date": "2026-08-09",
+  "source": {
+    "testsPassed": 89,
+    "preflightPassed": true,
+    "gitDiffCheckPassed": true
+  },
+  "installedPlugin": {
+    "baseVersion": "0.1.1",
+    "cachebusterPolicy": "single codex timestamp suffix",
+    "testsPassed": 89,
+    "preflightPassed": true,
+    "pluginValidationPassed": true,
+    "pathlessSearchPassed": true,
+    "windowsProcessFilterPassed": true
+  },
+  "realProjects": [
+    {
+      "project": "TactileGear",
+      "testsPassed": 34,
+      "matchedBenchmarkRuns": 3,
+      "ruleOnly": true,
+      "workingTreeGuardPassed": true
+    },
+    {
+      "project": "Heliolune",
+      "testsPassed": 188,
+      "frozen": true,
+      "zeroMatchSearchPassed": true
+    }
+  ],
+  "adaptiveAcceptance": {
+    "desktopMcpToolsProjected": true,
+    "modelInvokedDuringReleaseGate": false,
+    "deterministicRouteContextAcceptPassed": true,
+    "ticketConsumedAfterAcceptance": true,
+    "routingPolicy": "semantic-value-v2",
+    "failureFloorBytes": 512,
+    "semanticEvidenceFloorBytes": 768,
+    "statusOnlyStaysRuleBased": true,
+    "realPatchRoutesToLuna": true,
+    "temporaryLunaLeafGuard": true,
+    "singlePatternCrossModuleFailureEffort": "high",
+    "xhighPolicy": "multiple failures, at least 32 KiB complex failure, or at least 16 KiB cross-module patch causal analysis",
+    "desktopLeafProbe": {
+      "recursiveThreadLifecyclePlanned": false,
+      "firstTurnMilliseconds": 31449,
+      "lunaContextProjectedBeforeDesktopRestart": false,
+      "transportNoteRejectedByValidator": true,
+      "ticketConsumedWithRuleFallback": true
+    },
+    "mcpSchemaUpdateRequiresDesktopRestart": true,
+    "repeatedEvidenceFixture": {
+      "rawCommandOutputBytes": 7040,
+      "consecutiveDuplicatesCollapsed": 179,
+      "finalDiagnosticsRetained": true
+    }
+  },
+  "backgroundSupervision": {
+    "maximumCommandSeconds": 43200,
+    "persistentAcrossDesktopTaskRestart": true,
+    "retainedLogTailBytes": 2097152,
+    "acceptanceWaitMilliseconds": 12000,
+    "jobWaitCalls": 1,
+    "modelPolls": 0,
+    "otherMcpWorkCompletedWhileRunning": true,
+    "singleCallSuperviseResponsivePing": true,
+    "fourWorkerConcurrencyPassed": true,
+    "deadlineExit124Passed": true,
+    "failedJobRoutesAfterFreshMcpProcess": true,
+    "launchingCacheDeletedWhileRunningPassed": true,
+    "realProjectBackground": {
+      "project": "Heliolune",
+      "testsPassed": 188,
+      "foregroundGitAndSearchCompletedFirst": true,
+      "workingTreeFactsUnchanged": true,
+      "jobWaitCalls": 1,
+      "modelPolls": 0
+    }
+  },
+  "securityBoundary": {
+    "unknownPackageScriptRejected": true,
+    "arbitraryBenchmarkHelperRejected": true,
+    "ripgrepPreprocessorRejected": true,
+    "absoluteSearchPathRejected": true,
+    "symlinkEscapeRejected": true,
+    "gitExternalAndOutputFlagsRejected": true,
+    "executionToolsMarkedReadOnly": false,
+    "observationToolMarkedReadOnly": true,
+    "observerSurvivesPluginCacheReplacement": true
+  },
+  "resolvedReleaseBlockers": [
+    "pathless search waiting on stdin",
+    "Windows process-name query mapping",
+    "ripgrep no-match misclassified as failure",
+    "adaptive routing contaminating rule-only benchmarks",
+    "duplicate Luna initialization evidence",
+    "accepted Luna tickets remaining readable",
+    "long commands consuming model context through repeated polling",
+    "background commands blocking unrelated Codex work",
+    "coarse Luna routing missing semantically valuable evidence",
+    "unsafe execution flags crossing read-only tool metadata",
+    "running MCP observer broken by plugin cache replacement",
+    "temporary Luna considering recursive task creation",
+    "single repeated cross-module diagnostic unnecessarily selecting xhigh"
+  ],
+  "result": "pass",
+  "claim": "No blocking usage issue was found in the tested release scope."
+}

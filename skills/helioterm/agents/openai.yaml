@@ -1,4 +1,4 @@
 interface:
   display_name: "HelioTerm"
-  short_description: "Fast zero-model batched terminal"
-  default_prompt: "Use $helioterm direct mode and batch all bounded observations into one local call."
+  short_description: "Universal compressed terminal transport"
+  default_prompt: "Use $helioterm to run every non-interactive terminal command through compressed direct, supervised, or background execution."

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { runDirect, runDirectBatch } from '../scripts/direct-runner.mjs';
+import { runDirect, runDirectBatch, runDirectEvidence } from '../scripts/direct-runner.mjs';
 import { evidenceSample, runCommand, semanticFacts } from '../scripts/kernel.mjs';
 
 test('direct runner executes a batched test request without a model or MCP', async () => {
@@ -16,6 +16,46 @@ test('direct runner CLI emits exactly one compact line', () => {
   assert.equal(run.status, 0, run.stderr || run.stdout);
   assert.equal(run.stdout.trim().split(/\r?\n/u).length, 1);
   assert.match(run.stdout.trim(), /\|model=0$/u);
+});
+
+test('direct evidence mode returns an exact bounded source slice through HelioTerm', async () => {
+  const result = await runDirectEvidence({
+    request: 'T|read|package.json 1 5',
+    cwd: process.cwd(),
+    maxBytes: 4096,
+  });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /^OK\|calls=1\|evidence=1\|operation=read\|raw=\d+\|shown=\d+\|model=0\n1:\{/u);
+  assert.match(result.text, /2:  "name": "helioterm"/u);
+  assert.equal(result.more, false);
+});
+
+test('direct evidence mode clips locally and rejects execution operations', async () => {
+  const clipped = await runDirectEvidence({
+    request: 'T|read|README.md 1 200',
+    cwd: process.cwd(),
+    maxBytes: 256,
+  });
+  assert.equal(clipped.pass, true, clipped.text);
+  assert.equal(clipped.more, true);
+  assert.equal(clipped.shownBytes, 256);
+  assert.match(clipped.text, /\|more=1\|model=0\n/u);
+
+  const rejected = await runDirectEvidence({
+    request: 'T|process|node',
+    cwd: process.cwd(),
+  });
+  assert.equal(rejected.pass, false);
+  assert.equal(rejected.text, 'FAIL|calls=0|evidence-request-invalid|model=0');
+});
+
+test('direct evidence CLI is explicit and may return multiple lines', () => {
+  const run = spawnSync(process.execPath, [
+    'scripts/direct-runner.mjs', '--request', 'T|read|package.json 1 3', '--cwd', process.cwd(), '--evidence', '--evidence-bytes', '4096',
+  ], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  assert.match(run.stdout, /^OK\|calls=1\|evidence=1\|operation=read/u);
+  assert.match(run.stdout, /\n1:\{/u);
 });
 
 test('direct runner batches different observations into one process result', async () => {
@@ -151,14 +191,14 @@ test('evidence removes repeated diagnostics and normalizes the workspace path', 
 test('files lists one repo-relative directory without a shell', async () => {
   const result = await runDirect({ request: 'T|files|tests', cwd: process.cwd() });
   assert.equal(result.pass, true, result.text);
-  assert.deepEqual(result.command, { file: 'rg', args: ['--files', 'tests'] });
-  assert.match(result.text, /\|sample=tests[\\/]direct-runner\.test\.mjs/u);
+  assert.deepEqual(result.command, { file: 'rg', args: ['--no-config', '--files', 'tests'] });
+  assert.match(result.text, /\|sample=[^|]*tests[\\/][^|;]+\.test\.mjs/u);
 });
 
 test('direct runner validates a whole batch before executing anything', async () => {
   const result = await runDirectBatch({ requests: ['T|git|status --short', 'T|git|reset --hard'], cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|runner-error|model=0');
+  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
   assert.deepEqual(result.commands, []);
 });
 
@@ -171,5 +211,5 @@ test('direct runner fails closed before execution for an invalid request', async
 test('direct runner rejects a mutating git operation before execution', async () => {
   const result = await runDirect({ request: 'T|git|reset --hard', cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|runner-error|model=0');
+  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
 });

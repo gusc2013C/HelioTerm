@@ -1,0 +1,81 @@
+{
+  "date": "2026-08-08",
+  "scope": "terminal-observation-content-only",
+  "operationClassesBefore": 8,
+  "operationClassesAfter": 15,
+  "addedOperations": [
+    "read",
+    "list",
+    "json",
+    "stat",
+    "check",
+    "deps",
+    "version"
+  ],
+  "safety": {
+    "shellUsedByExpandedOperations": false,
+    "pathTraversalRejected": true,
+    "symlinkEscapeRejected": true,
+    "mutatingPackageCommandsRejected": true,
+    "interpreterEvalRejected": true,
+    "readLimitBytes": 2097152,
+    "readLimitLines": 200
+  },
+  "realProjectAcceptance": [
+    {
+      "project": "HelioTerm",
+      "testsPassed": 61,
+      "workload": ["read", "list", "json", "deps"],
+      "runs": 5,
+      "workingTreeUnchanged": true,
+      "plainMedianMilliseconds": 758.4745,
+      "heliotermMedianMilliseconds": 664.5612,
+      "latencyDifferencePercent": -12.3818664965,
+      "plainOutputBytes": 11408,
+      "heliotermOutputBytes": 252,
+      "savedEstimatedTokens": 2789,
+      "outputReductionPercent": 97.7910238429
+    },
+    {
+      "project": "TactileGear",
+      "testsPassed": 34,
+      "workload": ["read", "list", "deps", "version"],
+      "runs": 5,
+      "workingTreeUnchanged": true,
+      "plainMedianMilliseconds": 550.5569,
+      "heliotermMedianMilliseconds": 468.0966,
+      "latencyDifferencePercent": -14.9776163009,
+      "plainOutputBytes": 6710,
+      "heliotermOutputBytes": 236,
+      "savedEstimatedTokens": 1619,
+      "outputReductionPercent": 96.4828614009
+    },
+    {
+      "project": "Heliolune",
+      "testsPassed": 188,
+      "workload": ["test", "read", "stat", "git diff --check"],
+      "workingTreeModified": false,
+      "compactResultRawBytes": 18039
+    }
+  ],
+  "combinedNewOperationBenchmark": {
+    "plainOutputBytes": 18118,
+    "heliotermOutputBytes": 488,
+    "plainEstimatedTokens": 4530,
+    "heliotermEstimatedTokens": 122,
+    "savedEstimatedTokens": 4408,
+    "outputReductionPercent": 97.31
+  },
+  "fallbacksAfterExpansion": [
+    "Complete mandatory skill reference documents that must be read in full",
+    "Complete source or diff content when bounded evidence is insufficient"
+  ],
+  "desktopDeployment": {
+    "globalAgentsPolicyPointsToCurrentSource": true,
+    "globalPluginEnabled": true,
+    "desktopPluginCacheVersionObserved": "0.1.0-alpha.1+codex.20260808095139",
+    "sourceManifestVersion": "0.1.0",
+    "codexCliUsedForRefresh": false,
+    "note": "New tasks follow the current source through global AGENTS.md; plugin picker and MCP refresh still require a Desktop reinstall or app-supported refresh."
+  }
+}

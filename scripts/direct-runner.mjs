@@ -3,9 +3,11 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELIOTERM_LIMITS, validateRequest } from './firewall.mjs';
-import { assertWorkingDirectory, commandFor, runCommand } from './kernel.mjs';
+import { assertWorkingDirectory, commandFor, EVIDENCE_OPERATIONS, runCommand, runEvidenceOperation } from './kernel.mjs';
+import { attachAdaptiveRoute } from './adaptive-channel.mjs';
+import { aggregateTokenSavings } from './token-savings.mjs';
 
-const PARALLEL_OBSERVATIONS = new Set(['git', 'search', 'files', 'process']);
+const PARALLEL_OBSERVATIONS = new Set(['git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'deps', 'version']);
 
 function option(argv, name) {
   const index = argv.indexOf(name);
@@ -29,8 +31,11 @@ function numberFrom(text, field) {
   return value === undefined ? null : Number(value);
 }
 
-function observationCount(text) {
-  for (const field of ['lines', 'matches', 'files', 'changes', 'records', 'rows', 'issues']) {
+function observationCount(text, operation = null) {
+  const fields = ['count', 'hash'].includes(operation)
+    ? ['files']
+    : ['lines', 'matches', 'files', 'changes', 'records', 'rows', 'issues', 'entries', 'keys', 'packages'];
+  for (const field of fields) {
     const value = numberFrom(text, field);
     if (value !== null) return value;
   }
@@ -74,7 +79,7 @@ async function executePrepared(prepared, cwd) {
   return results;
 }
 
-export async function runDirectBatch({ requests, cwd }) {
+export async function runDirectBatch({ requests, cwd, adaptive = false, semantic = false }) {
   const list = Array.isArray(requests) ? requests : [];
   const parsed = list.map(validateRequest);
   if (!list.length || list.length > HELIOTERM_LIMITS.maxCommandsPerRequest || parsed.some((entry) => !entry.pass)) {
@@ -83,12 +88,23 @@ export async function runDirectBatch({ requests, cwd }) {
   const started = performance.now();
   try {
     assertWorkingDirectory(cwd);
-    const prepared = parsed.map((entry) => ({ operation: entry.operation, command: commandFor(entry.operation, entry.argument) }));
+    const prepared = parsed.map((entry) => ({ operation: entry.operation, command: commandFor(entry.operation, entry.argument, cwd) }));
     const results = await executePrepared(prepared, cwd);
     const elapsedMs = Math.max(0, Math.round(performance.now() - started));
     if (results.length === 1) {
-      const text = withSuffix(results[0].text, `|ms=${elapsedMs}|model=0`);
-      return { text, pass: text.startsWith('OK|'), elapsedMs, command: results[0].command, commands: [results[0].command] };
+      const baseText = withSuffix(results[0].text, `|ms=${elapsedMs}|model=0`);
+      const base = { ...results[0], text: baseText, savings: aggregateTokenSavings([results[0].savings], baseText) };
+      const routed = adaptive ? attachAdaptiveRoute({ result: base, semantic, cwd }) : base;
+      const text = routed.adaptive?.routed ? withSuffix(routed.text, '|model=0') : routed.text;
+      return {
+        ...routed,
+        text,
+        pass: results[0].text.startsWith('OK|'),
+        elapsedMs,
+        command: results[0].command,
+        commands: [results[0].command],
+        savings: aggregateTokenSavings([results[0].savings], text),
+      };
     }
     const ok = results.filter((entry) => entry.text.startsWith('OK|')).length;
     const allOk = ok === results.length;
@@ -96,7 +112,7 @@ export async function runDirectBatch({ requests, cwd }) {
     const testFail = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'fail') ?? 0), 0);
     const raw = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'raw') ?? 0), 0);
     const observations = results.map((entry) => {
-      const count = observationCount(entry.text);
+      const count = observationCount(entry.text, entry.operation);
       const status = allOk ? '' : `:${entry.text.startsWith('OK|') ? 'ok' : 'fail'}`;
       return `${entry.operation}${status}${count === null ? '' : `/${count}`}`;
     }).join(',');
@@ -112,26 +128,52 @@ export async function runDirectBatch({ requests, cwd }) {
     const health = allOk ? '' : `|ok=${ok}|opfail=${results.length - ok}`;
     const tests = pass || testFail ? `|pass=${pass}${testFail ? `|testfail=${testFail}` : ''}` : '';
     const prefix = `${allOk ? 'OK' : 'FAIL'}|calls=${results.length}${health}${tests}|ops=${observations}${more ? `|more=${more}` : ''}${samples ? `|sample=${samples}` : ''}`;
-    const text = withSuffix(prefix, `|raw=${raw}|ms=${elapsedMs}|model=0`);
-    return { text, pass: allOk, elapsedMs, commands: results.map((entry) => entry.command), results };
+    const baseText = withSuffix(prefix, `|raw=${raw}|ms=${elapsedMs}|model=0`);
+    const base = { text: baseText, pass: allOk, elapsedMs, commands: results.map((entry) => entry.command), results, savings: aggregateTokenSavings(results.map((entry) => entry.savings), baseText) };
+    const routed = adaptive ? attachAdaptiveRoute({ result: base, results, semantic, cwd }) : base;
+    const text = routed.adaptive?.routed ? withSuffix(routed.text, '|model=0') : routed.text;
+    return { ...routed, text, pass: allOk, savings: aggregateTokenSavings(results.map((entry) => entry.savings), text) };
   } catch {
     return { text: 'FAIL|calls=0|runner-error|model=0', pass: false, elapsedMs: Math.max(0, Math.round(performance.now() - started)), commands: [] };
   }
 }
 
-export async function runDirect({ request, cwd }) {
-  return runDirectBatch({ requests: [request], cwd });
+export async function runDirect({ request, cwd, adaptive = false, semantic = false }) {
+  return runDirectBatch({ requests: [request], cwd, adaptive, semantic });
+}
+
+export async function runDirectEvidence({ request, cwd, maxBytes = 8192 }) {
+  const parsed = validateRequest(request);
+  if (!parsed.pass || !EVIDENCE_OPERATIONS.has(parsed.operation)) {
+    return { text: 'FAIL|calls=0|evidence-request-invalid|model=0', pass: false, commands: [] };
+  }
+  try {
+    const result = await runEvidenceOperation({ operation: parsed.operation, argument: parsed.argument, cwd, maxBytes });
+    return { ...result, commands: [result.command] };
+  } catch (error) {
+    return { text: `FAIL|calls=0|evidence-error=${String(error.message).replace(/\|/gu, '/').slice(0, 160)}|model=0`, pass: false, commands: [] };
+  }
 }
 
 export async function runCli(argv = process.argv.slice(2)) {
   const requests = options(argv, '--request');
   const cwd = resolve(option(argv, '--cwd') ?? process.cwd());
   if (!requests.length) {
-    process.stderr.write('Usage: direct-runner.mjs --request <T|operation|argument> [--request <line> ...] [--cwd <directory>]\n');
+    process.stderr.write('Usage: direct-runner.mjs --request <T|operation|argument> [--request <line> ...] [--cwd <directory>] [--semantic] [--no-adaptive] [--evidence --evidence-bytes <256..32768>]\n');
     process.exitCode = 2;
     return;
   }
-  const result = await runDirectBatch({ requests, cwd });
+  if (argv.includes('--evidence')) {
+    const byteValue = option(argv, '--evidence-bytes');
+    const maxBytes = byteValue === undefined || !/^\d+$/u.test(byteValue) ? (byteValue === undefined ? 8192 : 0) : Number(byteValue);
+    const result = requests.length === 1
+      ? await runDirectEvidence({ request: requests[0], cwd, maxBytes })
+      : { text: 'FAIL|calls=0|evidence-requires-one-request|model=0', pass: false };
+    process.stdout.write(`${result.text}\n`);
+    if (!result.pass) process.exitCode = 1;
+    return;
+  }
+  const result = await runDirectBatch({ requests, cwd, adaptive: !argv.includes('--no-adaptive'), semantic: argv.includes('--semantic') });
   process.stdout.write(`${result.text}\n`);
   if (!result.pass) process.exitCode = 1;
 }

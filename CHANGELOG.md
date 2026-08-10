@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased - 0.3.0 R&D
+## 0.3.0 - 2026-08-10
 
-- Prototype a read-only MCP `batch` tool that exposes the existing four-operation parallel runner and collapses known independent observations into one owner/model round trip.
-- Prototype a sequential `terminal_batch` for two to four arbitrary commands known up front, with whole-batch validation and mandatory stop on first failure; do not parallelize mutations or absorb dependent planning.
+- Add a read-only MCP `batch` tool that exposes the existing four-operation parallel runner and collapses known independent observations into one owner/model round trip.
+- Add a sequential `terminal_batch` for two to four arbitrary commands known up front, with whole-batch validation and mandatory stop on first failure; do not parallelize mutations or absorb dependent planning.
 - Add a privacy-preserving rollout metrics parser that counts token deltas, cache ratio, sampling frequency, wrapper fan-out, and tool-output bytes without retaining prompt, command, or output content.
-- Add a matched local round-trip benchmark; keep provider billing and Codex quota estimates explicitly out of scope.
+- Add matched real MCP client/server benchmarks across three repositories; keep provider billing and Codex quota estimates explicitly out of scope.
 
 ## 0.2.0 - 2026-08-10
 

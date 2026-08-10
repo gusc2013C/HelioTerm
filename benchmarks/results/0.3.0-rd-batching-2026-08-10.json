@@ -13,6 +13,7 @@
     "existingTasksInterrupted": false
   },
   "source": {
+    "packageVersion": "0.3.0",
     "testsPassed": 133,
     "testsFailed": 0,
     "preflightPassed": true,

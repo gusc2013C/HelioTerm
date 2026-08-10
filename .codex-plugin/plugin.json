@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.2.0+codex.20260810022714",
+  "version": "0.3.0",
   "description": "Semantic terminal compression, intelligent Desktop Luna routing, and background command supervision without model polling.",
   "author": {
     "name": "Sicheng Gu",

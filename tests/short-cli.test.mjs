@@ -20,14 +20,14 @@ test('package registers both short and descriptive executable names', () => {
 test('short CLI reports the release version and concise help', () => {
   const version = run(['--version']);
   assert.equal(version.status, 0, version.stderr || version.stdout);
-  assert.equal(version.stdout.trim(), '0.2.0');
+  assert.equal(version.stdout.trim(), '0.3.0');
   const help = run(['--help']);
   assert.equal(help.status, 0, help.stderr || help.stdout);
   assert.match(help.stdout, /^Usage:\n  ht /u);
   assert.ok(help.stdout.length < 900, help.stdout);
 });
 
-test('short CLI entry guard accepts a symlinked executable path', () => {
+test('globally linked short CLI remains executable while an isolated source version is under test', () => {
   const locator = spawnSync(process.platform === 'win32' ? 'where.exe' : 'which', ['ht'], {
     cwd: process.cwd(), encoding: 'utf8', timeout: 10000,
   });
@@ -36,7 +36,7 @@ test('short CLI entry guard accepts a symlinked executable path', () => {
     ? spawnSync(process.env.ComSpec, ['/d', '/s', '/c', 'ht --version'], { cwd: process.cwd(), encoding: 'utf8', timeout: 10000 })
     : spawnSync('ht', ['--version'], { cwd: process.cwd(), encoding: 'utf8', timeout: 10000 });
   assert.equal(linked.status, 0, linked.stderr || linked.stdout);
-  assert.equal(linked.stdout.trim(), '0.2.0');
+  assert.match(linked.stdout.trim(), /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/u);
 });
 
 test('short CLI maps deterministic operations without a protocol envelope', () => {

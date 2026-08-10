@@ -7,6 +7,7 @@ import { acceptAdaptiveLunaResponse, attachAdaptiveRoute, contextForAdaptiveTick
 import { cancelBackgroundJob, startBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
 import { createTokenSavingsMeter, formatTokenSavings, replaceCompactTokenSavings } from './token-savings.mjs';
 import { runTerminalCommand, terminalSpecFromArguments, TERMINAL_SHELLS } from './terminal-transport.mjs';
+import { runDirectBatch } from './direct-runner.mjs';
 
 export { commandFor, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 
@@ -62,6 +63,30 @@ export const OBSERVE_TOOL = {
       ...executionProperties,
       operation: { type: 'string', enum: OBSERVATION_OPERATIONS },
       ...evidenceProperties,
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+};
+export const BATCH_TOOL = {
+  name: 'batch',
+  title: 'Observe up to four project facts',
+  description: 'Run two to four independent read-only observations in one MCP call. Use this when the operations are known up front to avoid repeated model/tool round trips.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['cwd', 'requests'],
+    properties: {
+      cwd: executionProperties.cwd,
+      requests: {
+        type: 'array', minItems: 2, maxItems: 4,
+        items: {
+          type: 'object', additionalProperties: false, required: ['operation', 'argument'],
+          properties: {
+            operation: { type: 'string', enum: OBSERVATION_OPERATIONS },
+            argument: executionProperties.argument,
+          },
+        },
+      },
+      adaptive: executionProperties.adaptive,
+      semantic: executionProperties.semantic,
     },
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
@@ -182,7 +207,7 @@ export const LUNA_ACCEPT_TOOL = {
   annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false },
 };
 export const TOOLS = Object.freeze([
-  OBSERVE_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_SUPERVISE_TOOL,
+  OBSERVE_TOOL, BATCH_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_SUPERVISE_TOOL,
   JOB_START_TOOL, TERMINAL_START_TOOL, JOB_WAIT_TOOL, JOB_CANCEL_TOOL,
   SAVINGS_TOOL, LUNA_CONTEXT_TOOL, LUNA_ACCEPT_TOOL,
 ]);
@@ -258,6 +283,30 @@ async function handleExecution(message, mode) {
   }) });
 }
 
+async function handleBatchExecution(message) {
+  const args = message.params.arguments ?? {};
+  const requests = Array.isArray(args.requests) ? args.requests : [];
+  if (requests.length < 2 || requests.some((entry) => !OBSERVATION_OPERATIONS.includes(entry?.operation))) {
+    throw new Error('batch requires two to four read-only observations');
+  }
+  const result = await runDirectBatch({
+    requests: requests.map((entry) => `T|${entry.operation}|${entry.argument}`),
+    cwd: args.cwd,
+    adaptive: args.adaptive !== false,
+    semantic: args.semantic === true,
+  });
+  if (result.savings) savingsMeter.record(result.savings);
+  send({ jsonrpc: '2.0', id: message.id, result: contentResult(result.text, {
+    isError: !result.pass,
+    structuredContent: {
+      calls: result.commands?.length ?? 0,
+      requested: requests.length,
+      waitedMilliseconds: result.elapsedMs ?? 0,
+      modelPolls: 0,
+    },
+  }) });
+}
+
 async function handleTerminalExecution(message, mode) {
   const args = message.params.arguments ?? {};
   const terminal = terminalSpecFromArguments(args);
@@ -313,6 +362,8 @@ async function handle(message) {
     }
     else if (message.method === 'tools/call' && ['observe', 'run', 'supervise'].includes(message.params?.name)) {
       await handleExecution(message, message.params.name);
+    } else if (message.method === 'tools/call' && message.params?.name === 'batch') {
+      await handleBatchExecution(message);
     } else if (message.method === 'tools/call' && message.params?.name === 'job_start') {
       const args = message.params.arguments ?? {};
       const started = startBackgroundJob({ ...args, timeoutMilliseconds: args.timeoutSeconds * 1000 });

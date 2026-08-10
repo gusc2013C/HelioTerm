@@ -8,6 +8,7 @@ import test from 'node:test';
 import { createAdaptiveTicket, readAdaptiveTicket, removeAdaptiveTicket } from '../scripts/adaptive-channel.mjs';
 import { JOB_DIRECTORY, readBackgroundJob, removeBackgroundJob, startBackgroundJob, waitBackgroundJob } from '../scripts/job-manager.mjs';
 import {
+  BATCH_TOOL,
   commandFor,
   JOB_CANCEL_TOOL,
   JOB_START_TOOL,
@@ -102,7 +103,7 @@ test('MCP stdio implements initialize, tool listing, and compact tool call', () 
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.name, 'helioterm');
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.2.0');
   assert.deepEqual(responses.find((entry) => entry.id === 2).result.tools.map((tool) => tool.name), [
-    'observe', 'run', 'supervise', 'terminal', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
+    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
   ]);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /^OK\|calls=1/u);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /\|model=0$/u);
@@ -183,15 +184,16 @@ test('MCP universal terminal evidence carries one-shot stdin without a plain ter
 
 test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(TOOLS[0], OBSERVE_TOOL);
-  assert.equal(TOOLS[1], TOOL);
-  assert.equal(TOOLS[2], SUPERVISE_TOOL);
-  assert.equal(TOOLS[3], TERMINAL_TOOL);
-  assert.equal(TOOLS[4], TERMINAL_SUPERVISE_TOOL);
-  assert.equal(TOOLS[5], JOB_START_TOOL);
-  assert.equal(TOOLS[6], TERMINAL_START_TOOL);
-  assert.equal(TOOLS[7], JOB_WAIT_TOOL);
-  assert.equal(TOOLS[8], JOB_CANCEL_TOOL);
-  assert.equal(TOOLS[9], SAVINGS_TOOL);
+  assert.equal(TOOLS[1], BATCH_TOOL);
+  assert.equal(TOOLS[2], TOOL);
+  assert.equal(TOOLS[3], SUPERVISE_TOOL);
+  assert.equal(TOOLS[4], TERMINAL_TOOL);
+  assert.equal(TOOLS[5], TERMINAL_SUPERVISE_TOOL);
+  assert.equal(TOOLS[6], JOB_START_TOOL);
+  assert.equal(TOOLS[7], TERMINAL_START_TOOL);
+  assert.equal(TOOLS[8], JOB_WAIT_TOOL);
+  assert.equal(TOOLS[9], JOB_CANCEL_TOOL);
+  assert.equal(TOOLS[10], SAVINGS_TOOL);
   assert.deepEqual(SAVINGS_TOOL.inputSchema, { type: 'object', additionalProperties: false, properties: {} });
   assert.equal(SAVINGS_TOOL.annotations.readOnlyHint, true);
   assert.equal(SAVINGS_TOOL.annotations.destructiveHint, false);
@@ -202,8 +204,8 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(JOB_START_TOOL.annotations.idempotentHint, false);
   assert.equal(JOB_WAIT_TOOL.annotations.readOnlyHint, true);
   const config = JSON.parse(readFileSync('.mcp.json', 'utf8'));
-  assert.equal(TOOLS[10], LUNA_CONTEXT_TOOL);
-  assert.equal(TOOLS[11], LUNA_ACCEPT_TOOL);
+  assert.equal(TOOLS[11], LUNA_CONTEXT_TOOL);
+  assert.equal(TOOLS[12], LUNA_ACCEPT_TOOL);
   assert.equal(LUNA_CONTEXT_TOOL.annotations.readOnlyHint, true);
   assert.match(LUNA_CONTEXT_TOOL.description, /already-created temporary Desktop Luna leaf/u);
   assert.match(LUNA_CONTEXT_TOOL.description, /never create or wait for another task/u);
@@ -213,8 +215,32 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(config.mcpServers.helioterm.default_tools_approval_mode, 'writes');
   assert.equal(config.mcpServers.helioterm.tool_timeout_sec, 43260);
   assert.deepEqual(config.mcpServers.helioterm.enabled_tools, [
-    'observe', 'run', 'supervise', 'terminal', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
+    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
   ]);
+});
+
+test('MCP batch executes four read-only observations in one tool call', () => {
+  assert.equal(BATCH_TOOL.annotations.readOnlyHint, true);
+  assert.equal(BATCH_TOOL.annotations.destructiveHint, false);
+  assert.equal(BATCH_TOOL.inputSchema.properties.requests.maxItems, 4);
+  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'batch', arguments: {
+    cwd: process.cwd(), adaptive: false, requests: [
+      { operation: 'git', argument: 'status --short' },
+      { operation: 'files', argument: 'tests' },
+      { operation: 'json', argument: 'package.json' },
+      { operation: 'count', argument: 'scripts/mcp-server.mjs tests/mcp-server.test.mjs' },
+    ],
+  } } };
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const result = JSON.parse(run.stdout.trim()).result;
+  assert.equal(result.isError, false);
+  assert.match(result.content[0].text, /^OK\|calls=4/u);
+  assert.match(result.content[0].text, /\|model=0$/u);
+  assert.equal(result.structuredContent.calls, 4);
+  assert.equal(result.structuredContent.requested, 4);
+  assert.equal(result.structuredContent.modelPolls, 0);
+  assert.ok(Buffer.byteLength(result.content[0].text, 'utf8') <= 256);
 });
 
 test('MCP supervise waits internally once while ping remains responsive', () => {

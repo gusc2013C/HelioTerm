@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - 0.3.0 R&D
+
+- Prototype a read-only MCP `batch` tool that exposes the existing four-operation parallel runner and collapses known independent observations into one owner/model round trip.
+- Add a privacy-preserving rollout metrics parser that counts token deltas, cache ratio, sampling frequency, wrapper fan-out, and tool-output bytes without retaining prompt, command, or output content.
+- Add a matched local round-trip benchmark; keep provider billing and Codex quota estimates explicitly out of scope.
+
 ## 0.2.0 - 2026-08-10
 
 - Register the structured MCP server as the primary Desktop terminal interface while retaining a short `ht`/`helioterm` executable for existing tasks whose MCP projection is fixed until a new task starts.

@@ -12,7 +12,7 @@ const config = existsSync(resolve(root, '.codex', 'config.toml')) ? readFileSync
 const role = existsSync(resolve(root, 'agents', 'helioterm.toml')) ? readFileSync(resolve(root, 'agents', 'helioterm.toml'), 'utf8') : '';
 const mcpRole = existsSync(resolve(root, 'agents', 'helioterm-mcp.toml')) ? readFileSync(resolve(root, 'agents', 'helioterm-mcp.toml'), 'utf8') : '';
 const commandAvailable = (file) => spawnSync(file, ['--version'], { encoding: 'utf8', windowsHide: true }).status === 0;
-const files = ['.codex-plugin/plugin.json', '.mcp.json', 'agents/helioterm-mcp.toml', 'skills/helioterm/SKILL.md', 'scripts/adaptive-channel.mjs', 'scripts/direct-runner.mjs', 'scripts/firewall.mjs', 'scripts/inspect-proof.mjs', 'scripts/find-rollout.mjs', 'scripts/install-project.mjs', 'scripts/luna-compressor.mjs', 'scripts/luna-profile.mjs', 'scripts/luna-ticket-acceptor.mjs', 'scripts/luna-ticket-reader.mjs', 'scripts/mcp-server.mjs'];
+const files = ['.codex-plugin/plugin.json', '.mcp.json', 'ACKNOWLEDGEMENTS.md', 'agents/helioterm-mcp.toml', 'skills/helioterm/SKILL.md', 'scripts/adaptive-channel.mjs', 'scripts/content-compression.mjs', 'scripts/direct-runner.mjs', 'scripts/firewall.mjs', 'scripts/headroom-mcp-client.mjs', 'scripts/inspect-proof.mjs', 'scripts/find-rollout.mjs', 'scripts/install-project.mjs', 'scripts/luna-compressor.mjs', 'scripts/luna-profile.mjs', 'scripts/luna-ticket-acceptor.mjs', 'scripts/luna-ticket-reader.mjs', 'scripts/mcp-server.mjs', 'scripts/settings.mjs'];
 const checks = [
   ...files.map((path) => ({ name: `${path}-present`, pass: existsSync(resolve(root, path)) })),
   { name: 'git-available', pass: commandAvailable('git') },

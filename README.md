@@ -7,15 +7,16 @@ HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this reposito
 ## What it guarantees
 
 - Zero HelioTerm model tokens for complete structured facts; owner intelligence is unchanged. Adaptive routing uses operation type, failure state, truncation, evidence diversity, patch semantics, and byte size: useful failures may route from 512 bytes, while successful source/search discovery requires an explicit semantic request. Status/stat/count/version output, symbol-index searches, and repeated noise stay deterministic.
-- Deterministic savings accounting: exact UTF-8 bytes plus a clearly labelled local bytes/4 token estimate. The meter never calls a model and never presents estimates as provider billing.
+- Deterministic savings accounting: exact UTF-8 bytes plus a clearly labelled local bytes/4 content estimate, and separate avoided-owner-wakeup / avoided-sampling-boundary counters. The meter never calls a model and never presents estimates as Desktop quota or provider billing.
 - One optional persistent model-backed leaf, never a planner, writer, reviewer, or delegator.
 - One temporary Desktop-native Luna semantic task for each routed burst. It uses a projectless `gpt-5.6-luna` task with high effort by default, reserves xhigh for complex causal analysis, reuses at most eight turns, and is archived when the parent burst ends or immediately on failure. The Sol task sees only an opaque ticket before Luna reads the bounded evidence itself.
 - Temporary Luna tasks are explicit leaves: they call `luna_context` directly and are forbidden from creating, inspecting, messaging, waiting for, or archiving another task. The parent may reuse one initialized leaf for up to eight successful tickets in the same bounded workload, then archives it.
 - Seventeen deterministic operation classes: Node `test`, Python `pytest`, `build`, read-only `git`, `search`, recursive `files`, `bench`, `process`, targeted `read`, non-recursive `list`, `json`, `stat`, internal `count` and SHA-256 `hash`, safe cross-ecosystem `check`, read-only `deps`, and `version`. Python tests disable cache and bytecode writes; repository inspection rejects absolute paths and parent traversal.
 - Broad safe command coverage without a shell: quality checks cover Node/npm, Python, Ruff, ESLint, TypeScript, Cargo, Go, .NET, Maven, Gradle, and CMake forms; dependency and version operations admit only known read-only forms. Unknown package scripts, arbitrary Node benchmark helpers, ripgrep preprocessors/config, Git output/external-diff flags, interpreter eval flags, absolute paths, traversal, and repository-relative symlink escapes fail before execution.
-- One universal terminal transport for everything outside those deterministic classes. It executes arbitrary programs with structured arguments, environment overrides, and one-shot stdin; explicit PowerShell/cmd/sh/bash mode admits pipelines, redirection, and shell built-ins. The optional `terminal_batch` runs two to four commands known up front sequentially after atomic validation and stops on first failure. Universal tools are marked destructive and open-world instead of weakening the observation firewall.
+- One universal terminal transport for everything outside those deterministic classes. It executes arbitrary programs with structured arguments, environment overrides, and one-shot stdin; explicit PowerShell/cmd/sh/bash mode admits pipelines, redirection, and shell built-ins. `terminal_batch` runs two to four short commands known up front in one foreground call. `terminal_batch_start` validates the same complete list before returning one opaque background handle, runs sequentially, stops on first failure, and is collected once with `job_wait`. Universal tools are marked destructive and open-world instead of weakening the observation firewall.
 - Useful bounded evidence: search, file-list, and read-only Git results retain a sanitized sample instead of forcing a second plain terminal call; Luna evidence collapses consecutive duplicate lines while retaining the repeat count and final diagnostics.
 - Adaptive disclosure: `more=1` means the semantic facts are valid but the sample is incomplete. When judgment actually needs original source, search results, a diff, or failure detail, `observe`/`run` can use `responseMode=evidence`, or direct mode can add `--evidence`. This explicit bounded path returns at most 32 KiB and records its real token cost instead of bypassing HelioTerm.
+- Optional reversible compression in 0.4.0: MCP callers can request `responseMode=compressed` before retained evidence becomes model-visible. HelioTerm routes known terminal/JSON/log shapes through its deterministic compressor and can route generic content through an internal Headroom MCP process. Both backends return the same opaque handle for bounded `compression_retrieve`; exact `evidence` remains unchanged.
 - Up to four different observations share one Node startup and one owner tool turn; the MCP `batch` tool exposes this path directly and adjacent read-only observations run concurrently.
 - At most 8 requests/session, 4 command calls/request, 256 request bytes, and 256 compact response bytes. Explicit evidence mode accepts exactly one allowlisted request and a 256..32768-byte body limit. Process inventory intentionally stays compact because process command lines can contain secrets.
 - Every final line carries truthful `calls=N` evidence.
@@ -24,7 +25,7 @@ HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this reposito
 
 The rule-first `direct-runner.mjs` path is the default. Its CLI enables adaptive ticket routing; use `--no-adaptive` only for a matched rule-only benchmark. Add `--semantic` when a truncated non-material observation genuinely needs semantic compression. Spark is not used. The older reusable Luna/high terminal role remains a compatibility fallback, not the adaptive path.
 
-The MCP server exposes fourteen tools: read-only `observe` and `batch`; deterministic `run` and `supervise`; universal `terminal`, `terminal_batch`, and `terminal_supervise`; deterministic/universal background starts; shared `job_wait` and `job_cancel`; `savings`; and the two Luna ticket tools. `batch` accepts two to four independent read-only observations with one shared working directory. `terminal_batch` accepts two to four preplanned commands, validates all of them before execution, runs them sequentially, and stops at the first failure. This structured tool surface is the primary Desktop interface. Compact mode is the default; bounded evidence is explicit. Arbitrary execution is truthfully marked destructive and open-world. Completed arbitrary jobs erase their persisted command, environment, and stdin.
+The MCP server exposes seventeen tools: read-only `observe` and `batch`; deterministic `run` and `supervise`; universal `terminal`, `terminal_batch`, `terminal_batch_start`, and `terminal_supervise`; deterministic/universal background starts; shared `job_wait` and `job_cancel`; `savings`; `compression_retrieve`; privacy-preserving `rollout_audit`; and the two Luna ticket tools. `batch` accepts two to four independent read-only observations with one shared working directory. Both terminal batch paths accept two to four preplanned commands, validate all of them before execution, run them sequentially, and stop at the first failure. This structured tool surface is the primary Desktop interface. Compact mode is the default; bounded exact evidence and reversible compressed evidence are explicit. Arbitrary execution is truthfully marked destructive and open-world. Completed or cancelled arbitrary jobs erase persisted command, environment, and stdin fields; terminal batches retain only per-step exit, duration, byte counts, and bounded evidence.
 
 For an existing task whose MCP tool projection cannot refresh until a new task starts, install the short local executable once with `npm link`. It removes both the absolute script path and the `T|...` request envelope:
 
@@ -34,6 +35,7 @@ ht -C . git status --short --branch
 ht -C . node --test tests/*.test.mjs
 ht -C . -e 8192 node scripts/custom-check.mjs
 ht -C . bg node scripts/long-job.mjs
+ht -C . batch-bg <base64url-json-command-array>
 ht -C . wait <job-handle>
 ```
 
@@ -82,13 +84,69 @@ node scripts/terminal-runner.mjs --cwd . --shell powershell --script "Get-ChildI
 
 The direct universal path supports `--stdin`, `--stdin-base64url`, `--evidence`, `--semantic`, and a deadline up to 43,200 seconds. A genuinely interactive PTY/TUI that requires incremental human keystrokes remains outside the one-result compression protocol.
 
+## Headroom interoperability and attribution (0.4.0)
+
+HelioTerm, Desktop-native Luna, and [Headroom](https://github.com/headroomlabs-ai/headroom) reduce different parts of the same cost. HelioTerm batches deterministic I/O and background work to avoid owner wakeups and model sampling boundaries. Its deterministic route handles terminal structure, Luna summarizes ordinary semantic text through an opaque local ticket, and Headroom's MCP can reduce selected nested structured content that still has to cross a surviving boundary. Both optional routes happen before raw payload is shown to the owner.
+
+Already-compact `observe`, `batch`, `terminal_batch`, status, test, and check envelopes are not sent through Headroom; doing so would add latency without meaningful byte savings. The two systems compound where it matters: HelioTerm first removes unnecessary tool/model boundaries, then the selected native or Headroom backend reduces the larger evidence crossing the remaining boundary.
+
+The native terminal compressor independently implements ideas documented by the Headroom project: content-specific routing, failure/outlier/change-point retention, fail-open behavior, reversible local retrieval, and protection of stable or exact code/diff content. Credit belongs to the Headroom Contributors; see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md), Headroom's [architecture](https://headroom-docs.vercel.app/docs/architecture), [CCR documentation](https://headroom-docs.vercel.app/docs/ccr), [NOTICE](https://github.com/headroomlabs-ai/headroom/blob/main/NOTICE), and [Apache-2.0 license](https://github.com/headroomlabs-ai/headroom/blob/main/LICENSE). HelioTerm's implementation is original rather than copied from Headroom source.
+
+Compression is opt-in per MCP result with `responseMode=compressed`. Configure the backend with the existing CLI:
+
+```powershell
+# Headroom's official full extra; use an isolated Python 3.13 uv tool.
+uv tool install --python 3.13 "headroom-ai[all]"
+headroom --version
+
+ht config show
+ht config set compression.backend auto
+ht config set compression.minimumBytes 8192
+ht config set compression.headroomCommand headroom
+ht config set compression.headroomArgs '["mcp","serve"]'
+ht config set compression.headroomTimeoutMilliseconds 5000
+ht config set compression.storeTtlSeconds 3600
+```
+
+If the uv tool bin directory is not on `PATH`, set `compression.headroomCommand` to the absolute `headroom`/`headroom.exe` path reported by `uv tool dir --bin`. HelioTerm launches only `headroom mcp serve` over stdio; it does not require routing Codex through Headroom's HTTP proxy.
+
+`native` is the safe content backend default and never starts Headroom. For universal `terminal`/`terminal_supervise` output, `auto` keeps logs, JSON arrays/JSONL, code, and diffs on HelioTerm's deterministic route, sends only large, genuinely nested JSON objects to the configured Headroom stdio MCP, and marks compressed ordinary text for the existing Desktop-native Luna adaptive lifecycle. The owner receives only a Luna ticket, creates or reuses the bounded temporary Luna task, validates the note with `luna_accept`, and retains deterministic canonical facts. `headroom` prefers Headroom for every eligible non-code/non-diff payload; `off` disables reversible content compression. Headroom timeout, startup failure, tool failure, missing tools, or a non-smaller result fails open to the native route. A payload is handled by one content backend, with Luna used only as the semantic text stage rather than a second byte compressor.
+
+That narrow `auto` rule is evidence-driven, not a claim that one compressor wins universally. A Windows real-project benchmark with Headroom 0.34.0 found the strongest complementary case on a 21,135-byte nested JSON object: native minification retained 16,860 bytes, while Headroom retained 596 bytes with successful retrieval. On logs and JSON arrays the native route was both smaller and about two seconds faster per warm call; Headroom returned `noop` for the tested README, prose, HTML, and CSV cases. Re-run [the benchmark](benchmarks/headroom-0.4-strategy.mjs) for the installed Headroom version and local workload before broadening the route. These are raw/model-visible bytes and wall time, not Desktop billing tokens.
+
+A separate whole-context benchmark exercises Headroom's official Python `compress(messages)` path rather than isolated payloads. Four fully synthetic 14.8K–191.5K-token conversations totaled 360,825 Headroom-tokenizer tokens before optimization and 200,894 after it (-44.324%). All 32 synthetic critical facts remained visible, system and user messages remained exact, every tool-call/result link remained valid, and all 15 messages in an incremental frozen prefix stayed byte-identical. The 191,517-token case was reduced to 106,123 tokens under a 120K model limit. Warm median wall time ranged from 60.8 to 375.6 ms. The benchmark makes no external model call and persists metrics only, never the generated context. See [the source](benchmarks/headroom-0.4-context.py) and [machine-readable result](benchmarks/results/0.4.0-headroom-context.json). Headroom tokenizer counts are controlled benchmark measurements, not Codex Desktop quota or provider billing.
+
+`compression_retrieve` accepts the returned 16-character handle and an optional query. Native handles retain only the compressor's bounded evidence input under the operating-system temporary directory for the configured TTL; records contain no command, environment, or stdin. Headroom-backed handles retain only the remote hash in HelioTerm, leaving original-content retention to Headroom's local CCR store. Because retrieval may start the user-configured Headroom process, this tool is truthfully annotated open-world. Exact source or diagnostic evidence should continue to use `responseMode=evidence` when semantic rewriting is not acceptable.
+
+When Headroom is enabled, it receives only HelioTerm's bounded retained output body, never the command, environment, or stdin metadata. That body can itself contain sensitive program output, so users should review Headroom's local storage and TTL configuration before enabling `auto` or `headroom` in sensitive repositories.
+
+Headroom's token counters and HelioTerm's bytes/4 content estimate are diagnostic proxies, not Desktop weekly quota or provider billing. Evaluate the combined path with wall time, raw/model-visible bytes, retrieval rate, correctness, tool boundaries, and avoided owner wakeups.
+
 ## Long-running commands without model polling
 
 Use MCP `supervise` or `terminal_supervise` when one expected long operation should occupy a single tool call. HelioTerm streams the process output locally, retains at most a 2 MiB diagnostic tail, counts all raw bytes, enforces its own deadline, and returns once with `wait=internal|polls=0`. Other MCP requests such as `ping` remain responsive while it waits.
 
-For work lasting minutes or hours, call `job_start` or `terminal_start` once with a timeout of at most 43,200 seconds. It returns a 16-character handle immediately; Codex can continue other work and call `job_wait` once at a natural checkpoint. Use `job_cancel` to stop the complete process tree. Without MCP projection, use `terminal-runner.mjs --background`, then one `--wait-job <handle>` or `--cancel-job <handle>`. Job state is stored under the operating-system temporary directory for seven days, so another Desktop task can collect it after a restart.
+For work lasting minutes or hours, call `job_start`, `terminal_start`, or `terminal_batch_start` once with a timeout of at most 43,200 seconds. Each returns a 16-character handle immediately; Codex can continue other work and call `job_wait` once at a natural checkpoint. Use `job_cancel` to stop the complete process tree. Without a refreshed MCP projection, source mode supports `terminal-runner.mjs --background-batch-base64url <payload>` and the short CLI exposes `ht ... batch-bg <payload>`, followed by one `wait` or `cancel`. Job state is stored under the operating-system temporary directory for seven days, so another Desktop task can collect it after a restart.
 
 MCP cannot inject an unsolicited tool result into a conversation after `job_start` has already returned. The one later `job_wait` is therefore intentional; it replaces repeated Codex terminal polling with one local wait. `.mcp.json` raises Codex's per-tool timeout to 12 hours plus a small transport margin.
+
+Background batching is only for workflows whose two to four commands are completely known before execution. Do not use it when a later command, approval, or risk decision depends on an earlier command's output. Sol remains responsible for architecture, risk judgment, edits, and acceptance; HelioTerm only merges preplanned I/O. For a batch of `N` commands, the synchronous path deterministically reports `N-1` avoided owner wakeups/sampling boundaries. The background start-plus-wait path reports `max(0, N-2)` because both the start acknowledgement and final collection remain visible tool boundaries.
+
+## Deterministic rollout audit
+
+`node scripts/rollout-metrics.mjs --rollout <jsonl> [...]` reads rollout JSONL without AI and emits metadata-only per-task/per-date counters: raw logged input/cached/output/reasoning tokens, samples, user turns, samples per user, tool wrappers, single-call wrapper ratio, tool-output bytes, and compactions. Prompt, command, environment, stdin, secret, and output bodies are never retained. When samples per user exceed 40 or estimated average context exceeds 120,000 raw logged tokens, the report recommends a compact handoff and a new Desktop task; it never creates or archives one. Raw logged tokens and bytes are diagnostic counters, not Desktop weekly quota or provider billing tokens.
+
+The `rollout_audit` MCP tool applies the same audit to one to eight rollout paths and reads user settings from `%USERPROFILE%\.codex\helioterm\settings.json` (or `$HOME/.codex/helioterm/settings.json`). Safe defaults keep automatic migration and archival off. Configure them with:
+
+```powershell
+ht config show
+ht config set migration.autoMigrate true
+ht config set migration.archiveOldSession true
+ht config set migration.samplesPerUserThreshold 40
+ht config set migration.contextTokensThreshold 120000
+```
+
+MCP servers cannot invoke Codex Desktop task lifecycle APIs. Therefore `rollout_audit` returns a deterministic `desktop-owner-compact-handoff-v1` migration decision. When automatic migration is enabled, the `$helioterm` owner workflow creates the new Desktop task with a compact handoff after a positive decision and archives the old task only when that separate setting is enabled and handoff creation succeeded. With automatic migration disabled, the same result remains advisory. The tool itself never creates, archives, or scans prompt bodies.
 
 ## Install from this checkout
 

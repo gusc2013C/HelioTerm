@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { cancellationRequested, readBackgroundJob, writeBackgroundJob } from './job-manager.mjs';
 import { runSupervisedOperation } from './kernel.mjs';
 import { runTerminalCommand } from './terminal-transport.mjs';
+import { runTerminalBatch } from './terminal-batch.mjs';
 
 export async function runBackgroundWorker(handle) {
   const state = readBackgroundJob(handle);
@@ -15,6 +16,7 @@ export async function runBackgroundWorker(handle) {
   if (cancellationRequested(handle)) {
     const cancelledState = { ...startedState, status: 'cancelled', finishedAt: new Date().toISOString(), error: 'cancelled by HelioTerm' };
     delete cancelledState.terminal;
+    delete cancelledState.terminals;
     writeBackgroundJob(cancelledState);
     return;
   }
@@ -30,7 +32,9 @@ export async function runBackgroundWorker(handle) {
   try {
     const result = state.operation === 'terminal'
       ? await runTerminalCommand({ terminal: state.terminal, cwd: state.cwd, timeoutMilliseconds: state.timeoutMilliseconds })
-      : await runSupervisedOperation({
+      : state.operation === 'terminal_batch'
+        ? await runTerminalBatch({ terminals: state.terminals, cwd: state.cwd, timeoutMilliseconds: state.timeoutMilliseconds })
+        : await runSupervisedOperation({
         operation: state.operation,
         argument: state.argument,
         cwd: state.cwd,
@@ -38,6 +42,7 @@ export async function runBackgroundWorker(handle) {
       });
     const completedState = { ...startedState };
     delete completedState.terminal;
+    delete completedState.terminals;
     writeBackgroundJob({
       ...completedState,
       status: result.text.startsWith('FAIL|') ? 'failed' : 'completed',
@@ -46,19 +51,24 @@ export async function runBackgroundWorker(handle) {
       result: {
         text: result.text,
         savings: result.savings,
-        command: state.operation === 'terminal' ? { file: 'helioterm:terminal', args: [] } : result.command,
+        command: state.operation.startsWith('terminal') ? { file: `helioterm:${state.operation}`, args: [] } : result.command,
         adaptiveEvidence: result.adaptiveEvidence,
         evidenceBody: result.evidenceBody,
         rawBytes: result.rawBytes,
         exitCode: result.exitCode,
         windowsShimRetry: result.windowsShimRetry === true,
         durationMilliseconds: result.durationMilliseconds,
+        steps: result.steps,
+        requested: state.operation === 'terminal_batch' ? state.terminals.length : 1,
+        avoidedOwnerWakeups: state.operation === 'terminal_batch' ? Math.max(0, state.terminals.length - 2) : 0,
+        avoidedSamplingBoundaries: state.operation === 'terminal_batch' ? Math.max(0, state.terminals.length - 2) : 0,
         modelPolls: 0,
       },
     });
   } catch (error) {
     const failedState = { ...startedState };
     delete failedState.terminal;
+    delete failedState.terminals;
     writeBackgroundJob({
       ...failedState,
       status: 'failed',
@@ -88,6 +98,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         const queued = readBackgroundJob(handle);
         const failed = { ...queued, status: 'failed', finishedAt: new Date().toISOString(), error: 'background worker launcher disconnected' };
         delete failed.terminal;
+        delete failed.terminals;
         writeBackgroundJob(failed);
       } catch { /* state may have been cancelled or removed */ }
       process.exitCode = 1;

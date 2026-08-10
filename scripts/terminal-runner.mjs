@@ -3,7 +3,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { attachAdaptiveRoute } from './adaptive-channel.mjs';
-import { cancelBackgroundJob, confirmBackgroundJobStart, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
+import { cancelBackgroundJob, confirmBackgroundJobStart, startBackgroundTerminalBatchJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
 import { evidenceOutput } from './kernel.mjs';
 import { replaceCompactTokenSavings } from './token-savings.mjs';
 import { runTerminalCommand } from './terminal-transport.mjs';
@@ -132,7 +132,12 @@ export async function runCli(argv = process.argv.slice(2)) {
       }
       if (!waited.state.result) throw new Error(waited.state.error ?? 'background worker failed');
       const stored = waited.state.result;
-      const facts = ['background=1', `job=${waitHandle}`, ...(waited.state.operation === 'terminal' ? ['terminal=1'] : []), 'polls=0', `waitMs=${waited.waitedMilliseconds}`];
+      const facts = [
+        'background=1', `job=${waitHandle}`,
+        ...(waited.state.operation.startsWith('terminal') ? ['terminal=1'] : []),
+        ...(waited.state.operation === 'terminal_batch' ? ['batch=1', `wakeupsAvoided=${stored.avoidedOwnerWakeups}`, `boundariesAvoided=${stored.avoidedSamplingBoundaries}`] : []),
+        'polls=0', `waitMs=${waited.waitedMilliseconds}`,
+      ];
       if (flag(argv, '--evidence')) {
         const evidence = evidenceOutput({
           exitCode: stored.exitCode ?? (stored.text?.startsWith('FAIL|') ? 1 : 0),
@@ -155,6 +160,23 @@ export async function runCli(argv = process.argv.slice(2)) {
       const text = routed.adaptive?.routed ? appendFacts(routed.text, []) : routed.text;
       process.stdout.write(`${text}\n`);
       if (!base.pass) process.exitCode = 1;
+      return;
+    }
+    const batchPayload = option(argv, '--background-batch-base64url');
+    if (batchPayload !== undefined) {
+      if (!/^[A-Za-z0-9_-]+$/u.test(batchPayload) || batchPayload.length % 4 === 1) throw new Error('--background-batch-base64url must be valid base64url');
+      let commands;
+      try { commands = JSON.parse(Buffer.from(batchPayload, 'base64url').toString('utf8')); } catch { throw new Error('--background-batch-base64url must encode a JSON command array'); }
+      const started = startBackgroundTerminalBatchJob({
+        commands,
+        allowedKeys: new Set(['program', 'args', 'shell', 'script', 'env', 'stdin']),
+        cwd,
+        timeoutMilliseconds: timeoutSeconds * 1000,
+      });
+      const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+      const failed = confirmed.state.status === 'failed';
+      process.stdout.write(`${failed ? 'FAIL' : 'MORE'}|calls=0|requested=${commands.length}|status=${confirmed.state.status}|job=${started.handle}|background=1|terminal=1|batch=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0\n`);
+      if (failed) process.exitCode = 1;
       return;
     }
     const terminal = terminalSpec(argv);

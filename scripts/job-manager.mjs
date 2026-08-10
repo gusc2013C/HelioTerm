@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertWorkingDirectory, commandFor, MAX_COMMAND_TIMEOUT_MILLISECONDS } from './kernel.mjs';
 import { terminalCommandFor } from './terminal-transport.mjs';
+import { validateTerminalBatchCommands } from './terminal-batch.mjs';
 
 const HANDLE_PATTERN = /^[A-Za-z0-9_-]{16}$/u;
 const JOB_DIRECTORY = join(tmpdir(), 'helioterm-background-jobs');
@@ -85,6 +86,7 @@ export function writeBackgroundJob(state) {
 function withoutTerminalPayload(state) {
   const sanitized = { ...state };
   delete sanitized.terminal;
+  delete sanitized.terminals;
   return sanitized;
 }
 
@@ -101,7 +103,8 @@ function settleActiveJob(handle, error) {
   try {
     const current = readBackgroundJob(handle);
     if (FINAL_STATES.has(current.status)) return current;
-    writeBackgroundJob(failedWorkerState(current, error));
+    const failed = failedWorkerState(current, error);
+    writeBackgroundJob(failed);
     return readBackgroundJob(handle);
   } catch {
     return null;
@@ -206,6 +209,27 @@ export function startBackgroundTerminalJob({ terminal, cwd, timeoutMilliseconds 
   return launchBackgroundWorker(state, timeout);
 }
 
+export function startBackgroundTerminalBatchJob({ commands, allowedKeys, cwd, timeoutMilliseconds }) {
+  cleanupOldJobs();
+  assertWorkingDirectory(cwd);
+  const terminals = validateTerminalBatchCommands(commands, allowedKeys);
+  const timeout = validateTimeout(timeoutMilliseconds);
+  const handle = randomBytes(12).toString('base64url');
+  const now = new Date().toISOString();
+  const state = {
+    version: 1,
+    handle,
+    status: 'queued',
+    operation: 'terminal_batch',
+    terminals,
+    cwd,
+    timeoutMilliseconds: timeout,
+    createdAt: now,
+    updatedAt: now,
+  };
+  return launchBackgroundWorker(state, timeout);
+}
+
 function stopWorkerTree(pid) {
   if (!Number.isInteger(pid) || pid < 1) return;
   try {
@@ -234,6 +258,7 @@ export function cancelBackgroundJob(handle) {
     error: 'cancelled by HelioTerm',
   };
   delete cancelled.terminal;
+  delete cancelled.terminals;
   writeBackgroundJob(cancelled);
   return { state: readBackgroundJob(handle), cancelled: true };
 }

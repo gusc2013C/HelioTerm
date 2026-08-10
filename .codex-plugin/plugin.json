@@ -1,7 +1,7 @@
 {
   "name": "helioterm",
-  "version": "0.3.0+codex.20260810043228",
-  "description": "Semantic terminal compression, intelligent Desktop Luna routing, and background command supervision without model polling.",
+  "version": "0.4.0",
+  "description": "Semantic terminal compression, optional Headroom MCP interoperability, intelligent Desktop Luna routing, and background command supervision without model polling.",
   "author": {
     "name": "Sicheng Gu",
     "url": "https://github.com/gusc2013C"
@@ -14,13 +14,14 @@
     "terminal",
     "subagent",
     "luna",
+    "headroom",
     "token-compression"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "HelioTerm",
     "shortDescription": "Compressed terminal work without model polling.",
-    "longDescription": "HelioTerm batches bounded terminal observations, supervises long commands, and persists background jobs while Codex continues other work. Complete facts use deterministic compression; failures, real patches, and diverse truncated evidence can route to one reusable Desktop-native Luna task whose bounded note is validated by code and archived after the burst.",
+    "longDescription": "HelioTerm batches bounded terminal observations, supervises long commands, and persists background jobs while Codex continues other work. Complete facts use deterministic compression; an optional internal Headroom MCP backend can compress generic retained evidence without adding an owner-visible tool boundary; failures, real patches, and diverse truncated evidence can route to one reusable Desktop-native Luna task whose bounded note is validated by code and archived after the burst.",
     "developerName": "Sicheng Gu",
     "category": "Productivity",
     "capabilities": [

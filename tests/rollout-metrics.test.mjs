@@ -9,9 +9,11 @@ test('rollout metrics count sampling and tool round trips without retaining cont
   const root = mkdtempSync(join(tmpdir(), 'helioterm-rollout-'));
   const path = join(root, 'rollout-test.jsonl');
   const records = [
+    { timestamp: '2026-08-10T00:00:00Z', type: 'session_meta', payload: { id: 'task-private-id', private_prompt: 'must-not-leak' } },
     { timestamp: '2026-08-10T00:00:00Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 100, cached_input_tokens: 80, output_tokens: 10, reasoning_output_tokens: 2, total_tokens: 110 }, last_token_usage: { input_tokens: 100 } }, rate_limits: { primary: { used_percent: 2 } } } },
     { timestamp: '2026-08-10T00:00:01Z', type: 'event_msg', payload: { type: 'user_message', message: 'private prompt' } },
-    { timestamp: '2026-08-10T00:00:02Z', type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', input: "await tools.mcp__helioterm__observe({cwd:'x'});" } },
+    { timestamp: '2026-08-10T00:00:01.500Z', type: 'event_msg', payload: { type: 'context_compacted', secret: 'compaction-secret' } },
+    { timestamp: '2026-08-10T00:00:02Z', type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', input: "await tools.mcp__helioterm__observe({cwd:'x',env:{SECRET:'never-retain'},stdin:'never-retain'});" } },
     { timestamp: '2026-08-10T00:00:02.500Z', type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', input: "await tools.exec_command({cmd:'ht -C x -e 4096 -n git status'});" } },
     { timestamp: '2026-08-10T00:00:03Z', type: 'response_item', payload: { type: 'custom_tool_call_output', output: 'private output' } },
     { timestamp: '2026-08-10T00:00:04Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 340, cached_input_tokens: 300, output_tokens: 20, reasoning_output_tokens: 5, total_tokens: 360 }, last_token_usage: { input_tokens: 240 } }, rate_limits: { primary: { used_percent: 3 } } } },
@@ -34,8 +36,14 @@ test('rollout metrics count sampling and tool round trips without retaining cont
     assert.equal(report.tools.one_nested_wrapper_percent, 100);
     assert.equal(report.tools.single_nested_wrappers, 2);
     assert.equal(report.rate_limit.current_used_percent, 3);
+    assert.equal(report.task_id, 'task-private-id');
+    assert.equal(report.compactions, 1);
+    assert.equal(report.date_groups.length, 1);
+    assert.equal(report.date_groups[0].tool_wrappers, 2);
+    assert.equal(report.date_groups[0].single_call_wrapper_percent, 100);
+    assert.match(report.accounting_notice, /not Desktop weekly quota or provider billing tokens/u);
     const serialized = JSON.stringify(report);
-    assert.doesNotMatch(serialized, /private prompt|private output/u);
+    assert.doesNotMatch(serialized, /private prompt|private output|must-not-leak|compaction-secret|never-retain/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -48,8 +56,10 @@ test('rollout aggregate projects only complete four-call groups without billing 
     grouped_wrappers: 88,
     batch_calls: 22,
     eliminated_sampling_requests: 66,
+    avoided_owner_wakeups: 66,
+    avoided_model_sampling_boundaries: 66,
     raw_context_tokens_avoided: 8_445_558,
-    scope: 'counterfactual raw context; provider billing not inferred',
+    scope: 'deterministic counterfactual owner wakeups and raw logged context; Desktop quota and provider billing not inferred',
   });
   const base = {
     firstTimestamp: 10, lastTimestamp: 20,
@@ -65,9 +75,34 @@ test('rollout aggregate projects only complete four-call groups without billing 
   assert.equal(aggregate.tools.batch_eligible_single_wrappers, 8);
   assert.equal(aggregate.batch_projection[2].eliminated_sampling_requests, 6);
   assert.equal(aggregate.batch_projection[2].raw_context_tokens_avoided, 300);
+  assert.equal(aggregate.batch_projection[2].avoided_owner_wakeups, 6);
   assert.match(aggregate.scope, /content not retained/u);
 
   const emptyWindow = aggregateRolloutMetrics([{ ...base, firstTimestamp: null, lastTimestamp: null }]);
   assert.equal(emptyWindow.firstTimestamp, null);
   assert.equal(emptyWindow.lastTimestamp, null);
+});
+
+test('rollout audit emits advisory thresholds without creating or archiving tasks', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-rollout-threshold-'));
+  const path = join(root, 'threshold.jsonl');
+  const records = [
+    { timestamp: '2026-08-10T00:00:00Z', type: 'session_meta', payload: { id: 'threshold-task' } },
+    { timestamp: '2026-08-10T00:00:01Z', type: 'event_msg', payload: { type: 'user_message', message: 'secret' } },
+    ...Array.from({ length: 41 }, (_, index) => ({
+      timestamp: `2026-08-10T00:00:${String(index + 2).padStart(2, '0')}Z`,
+      type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: { input_tokens: (index + 1) * 130_000, cached_input_tokens: index * 120_000, output_tokens: index + 1, reasoning_output_tokens: index + 1, total_tokens: (index + 1) * 130_001 }, last_token_usage: { input_tokens: 130_000 } } },
+    })),
+  ];
+  writeFileSync(path, `${records.map(JSON.stringify).join('\n')}\n`);
+  try {
+    const report = await analyzeRollout(path);
+    assert.deepEqual(report.sampling.warnings.map((warning) => warning.code), ['samples-per-user-high', 'estimated-context-high']);
+    assert.ok(report.sampling.warnings.every((warning) => warning.automaticAction === false));
+    assert.deepEqual(report.date_groups[0].warnings.map((warning) => warning.code), ['samples-per-user-high', 'estimated-context-high']);
+    assert.doesNotMatch(JSON.stringify(report), /create_thread|set_thread_archived|"message":"secret"/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

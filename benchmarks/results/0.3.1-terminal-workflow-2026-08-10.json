@@ -1,0 +1,35 @@
+{
+  "schema": "helioterm-terminal-workflow-benchmark-v1",
+  "pass": true,
+  "rounds": 7,
+  "project": "HelioTerm",
+  "commands": 4,
+  "individual": {
+    "tool_boundaries": 4,
+    "avoided_owner_wakeups": 0,
+    "avoided_model_sampling_boundaries": 0,
+    "median_wall_ms": 234.454,
+    "raw_output_bytes": 4096,
+    "compact_response_bytes": 684,
+    "request_bytes": 952
+  },
+  "terminal_batch": {
+    "tool_boundaries": 1,
+    "avoided_owner_wakeups": 3,
+    "avoided_model_sampling_boundaries": 3,
+    "median_wall_ms": 234.869,
+    "raw_output_bytes": 4096,
+    "compact_response_bytes": 128,
+    "request_bytes": 574
+  },
+  "terminal_batch_start_wait": {
+    "tool_boundaries": 2,
+    "avoided_owner_wakeups": 2,
+    "avoided_model_sampling_boundaries": 2,
+    "median_wall_ms": 548.98,
+    "raw_output_bytes": 4096,
+    "compact_response_bytes": 288,
+    "request_bytes": 735
+  },
+  "scope": "local MCP transport and raw tool bytes only; Desktop quota and provider billing not inferred"
+}

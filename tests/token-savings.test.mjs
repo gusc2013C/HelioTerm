@@ -40,15 +40,17 @@ test('token savings measurements retain exact bytes and estimated tokens', () =>
 test('cumulative meter reports its own content cost without a model', () => {
   const meter = createTokenSavingsMeter();
   const entry = measureTokenSavings({ rawText: 'x'.repeat(400), compactText: 'y'.repeat(40) });
-  meter.record(entry);
-  meter.record(entry);
+  meter.record(entry, { ownerWakeupsAvoided: 2, samplingBoundariesAvoided: 2 });
+  meter.record(entry, { ownerWakeupsAvoided: 1, samplingBoundariesAvoided: 1 });
   const snapshot = meter.snapshot();
   assert.equal(snapshot.runs, 2);
   assert.equal(snapshot.savedBytes, 720);
   assert.equal(snapshot.savedEstimatedTokens, 180);
+  assert.equal(snapshot.ownerWakeupsAvoided, 3);
+  assert.equal(snapshot.samplingBoundariesAvoided, 3);
   const report = formatTokenSavings(snapshot);
-  assert.match(report, /^OK\|calls=0\|meter=content\|runs=2\|rawB=800\|outB=80\|savedB=720\|rawEst=200\|outEst=20\|savedEst=180\|pctB=90\.0/u);
-  assert.match(report, /\|method=bytes4\|scope=content\|model=0$/u);
+  assert.match(report, /^OK\|calls=0\|meter=content\|runs=2\|rawB=800\|outB=80\|savedB=720\|rawEst=200\|outEst=20\|savedEst=180\|wakeupsAvoided=3\|boundariesAvoided=3\|pctB=90\.0/u);
+  assert.match(report, /\|method=bytes4-content-estimate-not-billing\|scope=content\|model=0$/u);
   assert.ok(Buffer.byteLength(report, 'utf8') <= 256);
   const reportEstimate = Number(/\|reportEst=(-?\d+)\|/u.exec(report)?.[1]);
   const netEstimate = Number(/\|netEst=(-?\d+)\|/u.exec(report)?.[1]);

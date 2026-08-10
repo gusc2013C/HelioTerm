@@ -1,14 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { removeBackgroundJob } from '../scripts/job-manager.mjs';
 
-function run(args, timeout = 15000) {
+function run(args, timeout = 15000, environment = {}) {
   return spawnSync(process.execPath, ['scripts/ht.mjs', ...args], {
     cwd: process.cwd(),
     encoding: 'utf8',
     timeout,
+    env: { ...process.env, ...environment },
   });
 }
 
@@ -20,7 +23,7 @@ test('package registers both short and descriptive executable names', () => {
 test('short CLI reports the release version and concise help', () => {
   const version = run(['--version']);
   assert.equal(version.status, 0, version.stderr || version.stdout);
-  assert.equal(version.stdout.trim(), '0.3.0');
+  assert.equal(version.stdout.trim(), '0.4.0');
   const help = run(['--help']);
   assert.equal(help.status, 0, help.stderr || help.stdout);
   assert.match(help.stdout, /^Usage:\n  ht /u);
@@ -102,6 +105,83 @@ test('short CLI starts and collects one background command without polling', () 
     assert.equal(waited.status, 0, waited.stderr || waited.stdout);
     assert.match(waited.stdout, /short-bg/u);
     assert.match(waited.stdout, /\|polls=0\|/u);
+  } finally {
+    removeBackgroundJob(handle);
+  }
+});
+
+test('short CLI config manages automatic migration and archival settings with safe defaults', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-settings-'));
+  const path = join(root, 'settings.json');
+  const environment = { HELIOTERM_SETTINGS_PATH: path };
+  try {
+    const defaults = run(['config', 'show'], 15000, environment);
+    assert.equal(defaults.status, 0, defaults.stderr || defaults.stdout);
+    assert.deepEqual(JSON.parse(defaults.stdout).settings.migration, {
+      autoMigrate: false,
+      archiveOldSession: false,
+      samplesPerUserThreshold: 40,
+      contextTokensThreshold: 120000,
+    });
+    assert.deepEqual(JSON.parse(defaults.stdout).settings.compression, {
+      backend: 'native',
+      minimumBytes: 8192,
+      headroomCommand: 'headroom',
+      headroomArgs: ['mcp', 'serve'],
+      headroomTimeoutMilliseconds: 5000,
+      storeTtlSeconds: 3600,
+    });
+    for (const [key, value] of [
+      ['migration.autoMigrate', 'true'],
+      ['migration.archiveOldSession', 'true'],
+      ['migration.samplesPerUserThreshold', '50'],
+      ['migration.contextTokensThreshold', '140000'],
+      ['compression.backend', 'auto'],
+      ['compression.minimumBytes', '4096'],
+      ['compression.headroomCommand', process.execPath],
+      ['compression.headroomArgs', '["tests/fixtures/fake-headroom-mcp.mjs"]'],
+      ['compression.headroomTimeoutMilliseconds', '7000'],
+      ['compression.storeTtlSeconds', '1800'],
+    ]) {
+      const updated = run(['config', 'set', key, value], 15000, environment);
+      assert.equal(updated.status, 0, updated.stderr || updated.stdout);
+    }
+    const saved = JSON.parse(readFileSync(path, 'utf8'));
+    assert.deepEqual(saved.migration, { autoMigrate: true, archiveOldSession: true, samplesPerUserThreshold: 50, contextTokensThreshold: 140000 });
+    assert.deepEqual(saved.compression, {
+      backend: 'auto', minimumBytes: 4096, headroomCommand: process.execPath,
+      headroomArgs: ['tests/fixtures/fake-headroom-mcp.mjs'], headroomTimeoutMilliseconds: 7000, storeTtlSeconds: 1800,
+    });
+    const rejected = run(['config', 'set', 'migration.autoMigrate', 'yes'], 15000, environment);
+    assert.equal(rejected.status, 2);
+    assert.match(rejected.stdout, /^FAIL\|calls=0\|short-cli-error=/u);
+    writeFileSync(path, `${JSON.stringify({ version: 1, migration: saved.migration })}\n`);
+    const legacy = run(['config', 'show'], 15000, environment);
+    assert.equal(legacy.status, 0, legacy.stderr || legacy.stdout);
+    assert.deepEqual(JSON.parse(legacy.stdout).settings.compression, {
+      backend: 'native', minimumBytes: 8192, headroomCommand: 'headroom', headroomArgs: ['mcp', 'serve'],
+      headroomTimeoutMilliseconds: 5000, storeTtlSeconds: 3600,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('short CLI starts and collects one preplanned background batch', () => {
+  const commands = [
+    { program: process.execPath, args: ['-e', 'console.log("batch-bg-one")'] },
+    { program: process.execPath, args: ['-e', 'console.log("batch-bg-two")'] },
+  ];
+  const payload = Buffer.from(JSON.stringify(commands), 'utf8').toString('base64url');
+  const started = run(['-C', process.cwd(), '-t', '10', 'batch-bg', payload]);
+  assert.equal(started.status, 0, started.stderr || started.stdout);
+  const handle = /\|job=([A-Za-z0-9_-]{16})\|/u.exec(started.stdout)?.[1];
+  assert.ok(handle, started.stdout);
+  try {
+    const waited = run(['-C', process.cwd(), '-t', '10', '-e', '4096', 'wait', handle]);
+    assert.equal(waited.status, 0, waited.stderr || waited.stdout);
+    assert.match(waited.stdout, /batch-bg-one[\s\S]*batch-bg-two/u);
+    assert.match(waited.stdout, /\|batch=1\|wakeupsAvoided=0\|boundariesAvoided=0\|/u);
   } finally {
     removeBackgroundJob(handle);
   }

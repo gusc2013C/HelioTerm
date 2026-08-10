@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { createAdaptiveTicket, readAdaptiveTicket, removeAdaptiveTicket } from '../scripts/adaptive-channel.mjs';
 import { JOB_DIRECTORY, readBackgroundJob, removeBackgroundJob, startBackgroundJob, waitBackgroundJob } from '../scripts/job-manager.mjs';
+import { DEFAULT_SETTINGS } from '../scripts/settings.mjs';
 import {
   BATCH_TOOL,
+  COMPRESSION_RETRIEVE_TOOL,
   commandFor,
   JOB_CANCEL_TOOL,
   JOB_START_TOOL,
@@ -20,9 +22,11 @@ import {
   runOperation,
   runSupervisedOperation,
   SAVINGS_TOOL,
+  ROLLOUT_AUDIT_TOOL,
   SUPERVISE_TOOL,
   TERMINAL_START_TOOL,
   TERMINAL_BATCH_TOOL,
+  TERMINAL_BATCH_START_TOOL,
   TERMINAL_SUPERVISE_TOOL,
   TERMINAL_TOOL,
   TOOL,
@@ -58,9 +62,11 @@ test('supervised execution enforces its own deadline without model polling', asy
 
 test('MCP tool schema is narrow and shell-free command mapping is deterministic', () => {
   assert.deepEqual(TOOL.inputSchema.required, ['operation', 'argument', 'cwd']);
-  assert.deepEqual(OBSERVE_TOOL.inputSchema.properties.responseMode.enum, ['compact', 'evidence']);
+  assert.deepEqual(OBSERVE_TOOL.inputSchema.properties.responseMode.enum, ['compact', 'evidence', 'compressed']);
   assert.equal(OBSERVE_TOOL.inputSchema.properties.maxBytes.maximum, 32768);
-  assert.deepEqual(TOOL.inputSchema.properties.responseMode.enum, ['compact', 'evidence']);
+  assert.deepEqual(TOOL.inputSchema.properties.responseMode.enum, ['compact', 'evidence', 'compressed']);
+  assert.equal(COMPRESSION_RETRIEVE_TOOL.annotations.readOnlyHint, true);
+  assert.equal(COMPRESSION_RETRIEVE_TOOL.annotations.openWorldHint, true);
   assert.ok(OBSERVE_TOOL.inputSchema.properties.operation.enum.includes('count'));
   assert.ok(OBSERVE_TOOL.inputSchema.properties.operation.enum.includes('hash'));
   const command = commandFor('test', 'tests/firewall.test.mjs');
@@ -102,9 +108,9 @@ test('MCP stdio implements initialize, tool listing, and compact tool call', () 
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const responses = run.stdout.trim().split(/\r?\n/u).map(JSON.parse);
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.name, 'helioterm');
-  assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.3.0');
+  assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.4.0');
   assert.deepEqual(responses.find((entry) => entry.id === 2).result.tools.map((tool) => tool.name), [
-    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
+    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_batch_start', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'compression_retrieve', 'rollout_audit', 'luna_context', 'luna_accept',
   ]);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /^OK\|calls=1/u);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /\|model=0$/u);
@@ -190,12 +196,15 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(TOOLS[3], SUPERVISE_TOOL);
   assert.equal(TOOLS[4], TERMINAL_TOOL);
   assert.equal(TOOLS[5], TERMINAL_BATCH_TOOL);
-  assert.equal(TOOLS[6], TERMINAL_SUPERVISE_TOOL);
-  assert.equal(TOOLS[7], JOB_START_TOOL);
-  assert.equal(TOOLS[8], TERMINAL_START_TOOL);
-  assert.equal(TOOLS[9], JOB_WAIT_TOOL);
-  assert.equal(TOOLS[10], JOB_CANCEL_TOOL);
-  assert.equal(TOOLS[11], SAVINGS_TOOL);
+  assert.equal(TOOLS[6], TERMINAL_BATCH_START_TOOL);
+  assert.equal(TOOLS[7], TERMINAL_SUPERVISE_TOOL);
+  assert.equal(TOOLS[8], JOB_START_TOOL);
+  assert.equal(TOOLS[9], TERMINAL_START_TOOL);
+  assert.equal(TOOLS[10], JOB_WAIT_TOOL);
+  assert.equal(TOOLS[11], JOB_CANCEL_TOOL);
+  assert.equal(TOOLS[12], SAVINGS_TOOL);
+  assert.equal(TOOLS[13], COMPRESSION_RETRIEVE_TOOL);
+  assert.equal(TOOLS[14], ROLLOUT_AUDIT_TOOL);
   assert.deepEqual(SAVINGS_TOOL.inputSchema, { type: 'object', additionalProperties: false, properties: {} });
   assert.equal(SAVINGS_TOOL.annotations.readOnlyHint, true);
   assert.equal(SAVINGS_TOOL.annotations.destructiveHint, false);
@@ -206,8 +215,8 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(JOB_START_TOOL.annotations.idempotentHint, false);
   assert.equal(JOB_WAIT_TOOL.annotations.readOnlyHint, true);
   const config = JSON.parse(readFileSync('.mcp.json', 'utf8'));
-  assert.equal(TOOLS[12], LUNA_CONTEXT_TOOL);
-  assert.equal(TOOLS[13], LUNA_ACCEPT_TOOL);
+  assert.equal(TOOLS[15], LUNA_CONTEXT_TOOL);
+  assert.equal(TOOLS[16], LUNA_ACCEPT_TOOL);
   assert.equal(LUNA_CONTEXT_TOOL.annotations.readOnlyHint, true);
   assert.match(LUNA_CONTEXT_TOOL.description, /already-created temporary Desktop Luna leaf/u);
   assert.match(LUNA_CONTEXT_TOOL.description, /never create or wait for another task/u);
@@ -217,7 +226,7 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(config.mcpServers.helioterm.default_tools_approval_mode, 'writes');
   assert.equal(config.mcpServers.helioterm.tool_timeout_sec, 43260);
   assert.deepEqual(config.mcpServers.helioterm.enabled_tools, [
-    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
+    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_batch_start', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'compression_retrieve', 'rollout_audit', 'luna_context', 'luna_accept',
   ]);
 });
 
@@ -294,7 +303,8 @@ test('MCP terminal_batch runs planned commands sequentially in one bounded resul
   const result = JSON.parse(run.stdout.trim()).result;
   assert.equal(result.isError, false);
   assert.match(result.content[0].text, /^OK\|calls=2\|requested=2\|steps=1:ok,2:ok/u);
-  assert.match(result.content[0].text, /\|terminal=1\|ms=\d+\|model=0$/u);
+  assert.match(result.content[0].text, /\|terminal=1\|batch=1\|ms=\d+\|wakeupsAvoided=1\|boundariesAvoided=1\|model=0$/u);
+  assert.equal(result.structuredContent.ownerWakeupsAvoided, 1);
   assert.equal(result.structuredContent.calls, 2);
   assert.equal(result.structuredContent.modelPolls, 0);
   assert.ok(Buffer.byteLength(result.content[0].text, 'utf8') <= 256);
@@ -359,6 +369,259 @@ test('MCP terminal_batch enforces one whole-batch timeout budget and skips remai
     assert.equal(existsSync(marker), false);
     assert.ok(elapsed >= 800 && elapsed < 3000, `unexpected terminal batch timeout duration: ${elapsed}ms`);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MCP compressed response uses native routing before model visibility and retrieves through one opaque interface', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-mcp-compression-'));
+  const settingsPath = join(root, 'settings.json');
+  const contentRoot = join(root, 'content');
+  writeFileSync(settingsPath, JSON.stringify({
+    ...DEFAULT_SETTINGS,
+    compression: { ...DEFAULT_SETTINGS.compression, backend: 'native', minimumBytes: 64 },
+  }));
+  const environment = { ...process.env, HELIOTERM_SETTINGS_PATH: settingsPath, HELIOTERM_CONTENT_STORE_ROOT: contentRoot };
+  try {
+    const script = `for(let i=0;i<120;i++) console.log((i===73?'ERROR needle ':'INFO value ')+i+' '+ 'x'.repeat(40))`;
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal', arguments: {
+      program: process.execPath, args: ['-e', script], cwd: process.cwd(), responseMode: 'compressed', maxBytes: 2048,
+    } } };
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+      input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 15000, env: environment,
+    });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const result = JSON.parse(run.stdout.trim()).result;
+    assert.match(result.content[0].text, /\|compressed=1\|backend=native\|/u);
+    assert.equal(result.structuredContent.compression.attribution.includes('Headroom Contributors'), true);
+    const handle = result.structuredContent.compression.handle;
+    assert.match(handle, /^[A-Za-z0-9_-]{16}$/u);
+
+    const retrieve = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'compression_retrieve', arguments: {
+      handle, query: 'needle', maxBytes: 1024,
+    } } };
+    const retrieved = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+      input: `${JSON.stringify(retrieve)}\n`, encoding: 'utf8', timeout: 15000, env: environment,
+    });
+    assert.equal(retrieved.status, 0, retrieved.stderr || retrieved.stdout);
+    assert.match(JSON.parse(retrieved.stdout.trim()).result.content[0].text, /ERROR needle 73/u);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('MCP auto compression invokes Headroom internally and returns only the shared HelioTerm handle', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-mcp-headroom-'));
+  const settingsPath = join(root, 'settings.json');
+  const contentRoot = join(root, 'content');
+  writeFileSync(settingsPath, JSON.stringify({
+    ...DEFAULT_SETTINGS,
+    compression: {
+      ...DEFAULT_SETTINGS.compression,
+      backend: 'auto',
+      minimumBytes: 64,
+      headroomCommand: process.execPath,
+      headroomArgs: ['tests/fixtures/fake-headroom-mcp.mjs'],
+      headroomTimeoutMilliseconds: 3000,
+    },
+  }));
+  const environment = { ...process.env, HELIOTERM_SETTINGS_PATH: settingsPath, HELIOTERM_CONTENT_STORE_ROOT: contentRoot };
+  try {
+    const script = `console.log(JSON.stringify({service:'helioterm',policy:{retention:{days:7,marker:'needle'}},regions:Object.fromEntries(Array.from({length:120},(_,i)=>['region-'+i,{healthy:true,detail:'z'.repeat(80)}]))},null,2))`;
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal', arguments: {
+      program: process.execPath, args: ['-e', script], cwd: process.cwd(), responseMode: 'compressed', maxBytes: 2048,
+    } } };
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+      input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 15000, env: environment,
+    });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const result = JSON.parse(run.stdout.trim()).result;
+    assert.equal(result.structuredContent.compression.backend, 'headroom');
+    assert.match(result.content[0].text, /\nHEADROOM:/u);
+    assert.doesNotMatch(result.content[0].text, /generic prose row 119/u);
+    const record = JSON.parse(readFileSync(join(contentRoot, readdirSync(contentRoot)[0]), 'utf8'));
+    assert.equal(record.kind, 'headroom');
+    assert.equal(Object.hasOwn(record, 'content'), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('MCP compressed ordinary text routes through an opaque Desktop Luna ticket before owner visibility', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-mcp-luna-text-'));
+  const settingsPath = join(root, 'settings.json');
+  const contentRoot = join(root, 'content');
+  writeFileSync(settingsPath, JSON.stringify({
+    ...DEFAULT_SETTINGS,
+    compression: { ...DEFAULT_SETTINGS.compression, backend: 'auto', minimumBytes: 64 },
+  }));
+  const environment = { ...process.env, HELIOTERM_SETTINGS_PATH: settingsPath, HELIOTERM_CONTENT_STORE_ROOT: contentRoot };
+  let ticket = null;
+  try {
+    const script = `for(let i=0;i<120;i++) console.log(i===73?'SENTINEL_LUNA_TEXT retain seven snapshots':'ordinary prose row '+i+' '+ 'context '.repeat(12))`;
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal', arguments: {
+      program: process.execPath, args: ['-e', script], cwd: process.cwd(), responseMode: 'compressed', maxBytes: 2048,
+    } } };
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+      input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 15000, env: environment,
+    });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const result = JSON.parse(run.stdout.trim()).result;
+    const match = /\|route=luna\|effort=high\|ticket=([A-Za-z0-9_-]{16})\|model=0$/u.exec(result.content[0].text);
+    assert.ok(match, result.content[0].text);
+    ticket = match[1];
+    assert.doesNotMatch(result.content[0].text, /SENTINEL_LUNA_TEXT/u);
+    assert.equal(result.structuredContent.compression.backend, 'native');
+    assert.equal(result.structuredContent.semanticCompression.backend, 'luna');
+    assert.equal(result.structuredContent.semanticCompression.ticket, ticket);
+    assert.match(readAdaptiveTicket(ticket).evidence, /SENTINEL_LUNA_TEXT/u);
+  } finally {
+    if (ticket) removeAdaptiveTicket(ticket);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MCP retrieval failure is bounded and does not expose the local content-store path', () => {
+  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'compression_retrieve', arguments: {
+    handle: 'AAAAAAAAAAAAAAAA', maxBytes: 1024,
+  } } };
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+    input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const result = JSON.parse(run.stdout.trim()).result;
+  assert.equal(result.isError, true);
+  assert.equal(result.content[0].text, 'FAIL|calls=0|error=compression-handle-unavailable|model=0');
+  assert.doesNotMatch(result.content[0].text, /tmp|temp|helioterm-compressed-content/iu);
+});
+
+test('MCP rollout_audit applies migration settings without retaining private content or performing task lifecycle actions', () => {
+  assert.equal(ROLLOUT_AUDIT_TOOL.annotations.readOnlyHint, true);
+  assert.equal(ROLLOUT_AUDIT_TOOL.annotations.destructiveHint, false);
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-rollout-mcp-'));
+  const rollout = join(root, 'rollout.jsonl');
+  const settings = join(root, 'settings.json');
+  const records = [
+    { timestamp: '2026-08-10T00:00:00Z', type: 'session_meta', payload: { id: 'migration-task', prompt: 'private-migration-prompt' } },
+    { timestamp: '2026-08-10T00:00:01Z', type: 'event_msg', payload: { type: 'user_message', message: 'private-user-message' } },
+    ...Array.from({ length: 41 }, (_, index) => ({
+      timestamp: new Date(Date.parse('2026-08-10T00:00:02Z') + index * 1000).toISOString(),
+      type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: { input_tokens: (index + 1) * 130000, cached_input_tokens: index * 120000, output_tokens: index + 1, reasoning_output_tokens: index + 1 }, last_token_usage: { input_tokens: 130000 } } },
+    })),
+  ];
+  writeFileSync(rollout, `${records.map(JSON.stringify).join('\n')}\n`);
+  const callAudit = (autoMigrate, archiveOldSession) => {
+    writeFileSync(settings, `${JSON.stringify({ version: 1, migration: { autoMigrate, archiveOldSession, samplesPerUserThreshold: 40, contextTokensThreshold: 120000 } })}\n`);
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'rollout_audit', arguments: { rollouts: [rollout] } } };
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+      input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, HELIOTERM_SETTINGS_PATH: settings },
+    });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    return JSON.parse(run.stdout.trim()).result;
+  };
+  try {
+    const advisory = callAudit(false, false);
+    assert.match(advisory.content[0].text, /\|warnings=2\|migrate=0\|archive=0\|rawLogged=1\|billing=0\|model=0$/u);
+    assert.equal(advisory.structuredContent.migration.requested, false);
+    const automatic = callAudit(true, true);
+    assert.match(automatic.content[0].text, /\|warnings=2\|migrate=1\|archive=1\|rawLogged=1\|billing=0\|model=0$/u);
+    assert.deepEqual(automatic.structuredContent.warnings.map((warning) => warning.code), ['samples-per-user-high', 'estimated-context-high']);
+    assert.deepEqual(automatic.structuredContent.migration, { enabled: true, requested: true, archiveOldSession: true, protocol: 'desktop-owner-compact-handoff-v1' });
+    assert.doesNotMatch(JSON.stringify(automatic), /private-migration-prompt|private-user-message|create_thread|set_thread_archived/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MCP terminal_batch_start validates atomically, runs in order, and clears sensitive payloads before collection', () => {
+  assert.equal(TERMINAL_BATCH_START_TOOL.annotations.readOnlyHint, false);
+  assert.equal(TERMINAL_BATCH_START_TOOL.annotations.destructiveHint, true);
+  assert.equal(TERMINAL_BATCH_START_TOOL.annotations.openWorldHint, true);
+  assert.deepEqual(TERMINAL_BATCH_START_TOOL.inputSchema.required, ['cwd', 'commands', 'timeoutSeconds']);
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-terminal-batch-background-'));
+  const ordered = join(root, 'ordered.txt');
+  const invalidMarker = join(root, 'invalid-must-not-exist');
+  const append = (value) => `require('node:fs').appendFileSync(${JSON.stringify(ordered)},${JSON.stringify(value)})`;
+  let handle;
+  try {
+    const invalidRequest = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal_batch_start', arguments: {
+      cwd: root, timeoutSeconds: 5, commands: [
+        { program: process.execPath, args: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(invalidMarker)},'bad')`] },
+        { program: process.execPath, shell: 'powershell', script: 'echo invalid' },
+      ],
+    } } };
+    const invalid = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(invalidRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+    assert.equal(invalid.status, 0, invalid.stderr || invalid.stdout);
+    const rejected = JSON.parse(invalid.stdout.trim()).result;
+    assert.equal(rejected.isError, true);
+    assert.equal(rejected.structuredContent.calls, 0);
+    assert.equal(existsSync(invalidMarker), false);
+
+    const secret = 'background-secret-must-be-cleared';
+    const startRequest = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'terminal_batch_start', arguments: {
+      cwd: root, timeoutSeconds: 5, commands: [
+        { program: process.execPath, args: ['-e', append('one\n')], env: { HELIOTERM_TEST_SECRET: secret } },
+        { program: process.execPath, args: ['-e', append('two\n')], stdin: secret },
+      ],
+    } } };
+    const start = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(startRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+    assert.equal(start.status, 0, start.stderr || start.stdout);
+    const started = JSON.parse(start.stdout.trim()).result;
+    handle = started.structuredContent.job;
+    assert.match(started.content[0].text, /\|background=1\|terminal=1\|batch=1\|startupMs=\d+\|polls=0\|model=0$/u);
+    assert.equal(started.structuredContent.startupConfirmed, true);
+
+    const waitRequest = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'job_wait', arguments: { job: handle, timeoutSeconds: 5, adaptive: false } } };
+    const wait = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(waitRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+    assert.equal(wait.status, 0, wait.stderr || wait.stdout);
+    const completed = JSON.parse(wait.stdout.trim()).result;
+    assert.equal(completed.isError, false);
+    assert.equal(completed.structuredContent.status, 'completed');
+    assert.deepEqual(completed.structuredContent.steps.map((step) => step.exitCode), [0, 0]);
+    assert.equal(readFileSync(ordered, 'utf8'), 'one\ntwo\n');
+    const persisted = readFileSync(join(JOB_DIRECTORY, `${handle}.json`), 'utf8');
+    assert.doesNotMatch(persisted, /terminals|background-secret-must-be-cleared/u);
+  } finally {
+    if (handle) removeBackgroundJob(handle);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('background terminal batch stops on failure and can be cancelled as one process tree', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-terminal-batch-stop-'));
+  const marker = join(root, 'must-not-exist');
+  const markerScript = `require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad')`;
+  let failedHandle;
+  let cancelledHandle;
+  try {
+    const call = (id, commands, timeoutSeconds = 5) => {
+      const request = { jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'terminal_batch_start', arguments: { cwd: root, timeoutSeconds, commands } } };
+      const response = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000 });
+      assert.equal(response.status, 0, response.stderr || response.stdout);
+      return JSON.parse(response.stdout.trim()).result;
+    };
+    failedHandle = call(1, [
+      { program: process.execPath, args: ['-e', 'process.exit(9)'] },
+      { program: process.execPath, args: ['-e', markerScript] },
+    ]).structuredContent.job;
+    const waitRequest = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'job_wait', arguments: { job: failedHandle, timeoutSeconds: 5, adaptive: false } } };
+    const wait = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(waitRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+    const failed = JSON.parse(wait.stdout.trim()).result;
+    assert.equal(failed.isError, true);
+    assert.equal(failed.structuredContent.steps[0].exitCode, 9);
+    assert.equal(existsSync(marker), false);
+
+    cancelledHandle = call(3, [
+      { program: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] },
+      { program: process.execPath, args: ['-e', markerScript] },
+    ], 10).structuredContent.job;
+    const cancelRequest = { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'job_cancel', arguments: { job: cancelledHandle } } };
+    const cancel = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(cancelRequest)}\n`, encoding: 'utf8', timeout: 10000 });
+    const cancelled = JSON.parse(cancel.stdout.trim()).result;
+    assert.equal(cancelled.structuredContent.cancelled, true);
+    assert.equal(existsSync(marker), false);
+    assert.doesNotMatch(readFileSync(join(JOB_DIRECTORY, `${cancelledHandle}.json`), 'utf8'), /terminals/u);
+  } finally {
+    if (failedHandle) removeBackgroundJob(failedHandle);
+    if (cancelledHandle) removeBackgroundJob(cancelledHandle);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -613,14 +876,14 @@ test('MCP adaptive context and acceptance bridge one Desktop Luna ticket', () =>
   }
 });
 
-test('release base metadata stays aligned at 0.3.0 with an optional Codex cachebuster', () => {
+test('release base metadata stays aligned at 0.4.0 with an optional Codex cachebuster', () => {
   const packageMetadata = JSON.parse(readFileSync('package.json', 'utf8'));
   const pluginMetadata = JSON.parse(readFileSync('.codex-plugin/plugin.json', 'utf8'));
   const mcpSource = readFileSync('scripts/mcp-server.mjs', 'utf8');
-  assert.equal(packageMetadata.version, '0.3.0');
+  assert.equal(packageMetadata.version, '0.4.0');
   assert.equal(pluginMetadata.version.split('+')[0], packageMetadata.version);
-  assert.match(pluginMetadata.version, /^0\.3\.0(?:\+codex\.[A-Za-z0-9.-]+)?$/u);
-  assert.match(mcpSource, /const VERSION = '0\.3\.0';/u);
+  assert.match(pluginMetadata.version, /^0\.4\.0(?:\+codex\.[A-Za-z0-9.-]+)?$/u);
+  assert.match(mcpSource, /const VERSION = '0\.4\.0';/u);
 });
 
 test('MCP role fails closed instead of falling back to a shell', () => {

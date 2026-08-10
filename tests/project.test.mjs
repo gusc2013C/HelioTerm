@@ -38,6 +38,17 @@ test('all model-backed standalone terminal roles use Luna high', () => {
   }
 });
 
+test('ordinary codex delegation is never mistaken for a temporary Luna leaf', () => {
+  const skill = readFileSync('skills/helioterm/SKILL.md', 'utf8');
+  assert.match(skill, /exact marker `<helioterm_luna_leaf ticket=/u);
+  assert.match(skill, /Never treat `source_thread_id` as a ticket/u);
+  const isLeaf = (input) => /<helioterm_luna_leaf ticket="[A-Za-z0-9_-]{16}">/u.test(input)
+    && /temporary HelioTerm semantic compressor/u.test(input);
+  const ordinaryDelegation = '<codex_delegation><source_thread_id>019fc3c5-da37-7a13-8f79-d04107843fff</source_thread_id><input>You are the HelioTerm 0.3.1 engineering owner.</input></codex_delegation>';
+  assert.equal(isLeaf(ordinaryDelegation), false);
+  assert.equal(isLeaf('<helioterm_luna_leaf ticket="AbCdEf0123_-xyZ9"> This task is the temporary HelioTerm semantic compressor.'), true);
+});
+
 test('configurator inspects without writes and fails closed on unsafe requests', () => {
   const inspect = spawnSync(process.execPath, ['scripts/configure-model.mjs'], { encoding: 'utf8' });
   assert.equal(inspect.status, 0, inspect.stderr || inspect.stdout);

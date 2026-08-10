@@ -409,7 +409,8 @@ test('MCP background job lets another operation finish before one final wait', (
   assert.equal(start.status, 0, start.stderr || start.stdout);
   const started = JSON.parse(start.stdout.trim()).result;
   const handle = started.structuredContent.job;
-  assert.match(started.content[0].text, /\|background=1\|polls=0\|model=0$/u);
+  assert.match(started.content[0].text, /\|background=1\|startupMs=\d+\|polls=0\|model=0$/u);
+  assert.equal(started.structuredContent.startupConfirmed, true);
 
   const followup = [
     { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'job_wait', arguments: { job: handle, timeoutSeconds: 5 } } },
@@ -439,7 +440,8 @@ test('MCP arbitrary terminal background job returns retained evidence without re
   assert.equal(start.status, 0, start.stderr || start.stdout);
   const started = JSON.parse(start.stdout.trim()).result;
   const handle = started.structuredContent.job;
-  assert.match(started.content[0].text, /\|terminal=1\|polls=0\|model=0$/u);
+  assert.match(started.content[0].text, /\|terminal=1\|startupMs=\d+\|polls=0\|model=0$/u);
+  assert.equal(started.structuredContent.startupConfirmed, true);
   try {
     const waitRequest = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'job_wait', arguments: {
       job: handle, timeoutSeconds: 5, responseMode: 'evidence', maxBytes: 4096,

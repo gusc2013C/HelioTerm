@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import readline from 'node:readline';
 import { OPERATIONS, commandFor, evidenceOutput, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 import { acceptAdaptiveLunaResponse, attachAdaptiveRoute, contextForAdaptiveTicket } from './adaptive-channel.mjs';
-import { cancelBackgroundJob, startBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
+import { cancelBackgroundJob, confirmBackgroundJobStart, startBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
 import { aggregateTokenSavings, createTokenSavingsMeter, formatTokenSavings, replaceCompactTokenSavings } from './token-savings.mjs';
 import { runTerminalCommand, terminalCommandFor, terminalSpecFromArguments, TERMINAL_SHELLS } from './terminal-transport.mjs';
 import { runDirectBatch } from './direct-runner.mjs';
@@ -340,9 +340,13 @@ async function handleTerminalExecution(message, mode) {
   const terminal = terminalSpecFromArguments(args);
   if (mode === 'terminal_start') {
     const started = startBackgroundTerminalJob({ terminal, cwd: args.cwd, timeoutMilliseconds: args.timeoutSeconds * 1000 });
-    const text = `MORE|calls=0|status=queued|job=${started.handle}|background=1|terminal=1|polls=0|model=0`;
+    const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+    const status = confirmed.state.status;
+    const failed = status === 'failed';
+    const text = `${failed ? 'FAIL' : 'MORE'}|calls=0|status=${status}|job=${started.handle}|background=1|terminal=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0`;
     send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
-      structuredContent: { job: started.handle, status: started.status, timeoutMilliseconds: started.timeoutMilliseconds, modelPolls: 0 },
+      isError: failed,
+      structuredContent: { job: started.handle, status, timeoutMilliseconds: started.timeoutMilliseconds, startupConfirmed: confirmed.confirmed, modelPolls: 0 },
     }) });
     return;
   }
@@ -460,9 +464,13 @@ async function handle(message) {
     } else if (message.method === 'tools/call' && message.params?.name === 'job_start') {
       const args = message.params.arguments ?? {};
       const started = startBackgroundJob({ ...args, timeoutMilliseconds: args.timeoutSeconds * 1000 });
-      const text = `MORE|calls=0|status=queued|job=${started.handle}|background=1|polls=0|model=0`;
+      const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+      const status = confirmed.state.status;
+      const failed = status === 'failed';
+      const text = `${failed ? 'FAIL' : 'MORE'}|calls=0|status=${status}|job=${started.handle}|background=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0`;
       send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
-        structuredContent: { job: started.handle, status: started.status, timeoutMilliseconds: started.timeoutMilliseconds, modelPolls: 0 },
+        isError: failed,
+        structuredContent: { job: started.handle, status, timeoutMilliseconds: started.timeoutMilliseconds, startupConfirmed: confirmed.confirmed, modelPolls: 0 },
       }) });
     } else if (message.method === 'tools/call' && message.params?.name === 'job_wait') {
       const args = message.params.arguments ?? {};

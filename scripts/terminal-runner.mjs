@@ -3,7 +3,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { attachAdaptiveRoute } from './adaptive-channel.mjs';
-import { cancelBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
+import { cancelBackgroundJob, confirmBackgroundJobStart, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
 import { evidenceOutput } from './kernel.mjs';
 import { replaceCompactTokenSavings } from './token-savings.mjs';
 import { runTerminalCommand } from './terminal-transport.mjs';
@@ -160,7 +160,10 @@ export async function runCli(argv = process.argv.slice(2)) {
     const terminal = terminalSpec(argv);
     if (flag(argv, '--background')) {
       const started = startBackgroundTerminalJob({ terminal, cwd, timeoutMilliseconds: timeoutSeconds * 1000 });
-      process.stdout.write(`MORE|calls=0|status=queued|job=${started.handle}|background=1|terminal=1|polls=0|model=0\n`);
+      const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+      const failed = confirmed.state.status === 'failed';
+      process.stdout.write(`${failed ? 'FAIL' : 'MORE'}|calls=0|status=${confirmed.state.status}|job=${started.handle}|background=1|terminal=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0\n`);
+      if (failed) process.exitCode = 1;
       return;
     }
     const responseMode = flag(argv, '--evidence') ? 'evidence' : 'compact';

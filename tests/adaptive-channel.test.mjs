@@ -55,9 +55,11 @@ test('adaptive routing uses semantic value instead of one coarse size gate', () 
     args: ['scripts/example.mjs', '1', '200'],
   });
   const automatic = classifyAdaptiveCompression({ results: [diverseRead] });
-  assert.equal(automatic.useLuna, true);
-  assert.equal(automatic.semanticScore, 3);
-  assert.equal(automatic.reason, 'semantic-output');
+  assert.equal(automatic.useLuna, false);
+  const requested = classifyAdaptiveCompression({ results: [diverseRead], semantic: true });
+  assert.equal(requested.useLuna, true);
+  assert.equal(requested.semanticScore, 3);
+  assert.equal(requested.reason, 'requested');
 });
 
 test('large multi-failure evidence deterministically selects xhigh', () => {

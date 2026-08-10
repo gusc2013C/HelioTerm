@@ -10,8 +10,9 @@ const execFileAsync = promisify(execFile);
 export const INTERNAL_OBSERVER = 'helioterm:observer';
 export const DEFAULT_COMMAND_TIMEOUT_MILLISECONDS = 240_000;
 export const MAX_COMMAND_TIMEOUT_MILLISECONDS = 12 * 60 * 60 * 1000;
-export const OPERATIONS = new Set(['test', 'pytest', 'build', 'git', 'search', 'files', 'bench', 'process', 'read', 'list', 'json', 'stat', 'check', 'deps', 'version']);
-const READ_ONLY_GIT = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'grep', 'describe']);
+export const OPERATIONS = new Set(['test', 'pytest', 'build', 'git', 'search', 'files', 'bench', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'check', 'deps', 'version']);
+export const EVIDENCE_OPERATIONS = new Set(['test', 'pytest', 'build', 'git', 'search', 'files', 'bench', 'read', 'list', 'json', 'stat', 'count', 'hash', 'check', 'deps', 'version']);
+const READ_ONLY_GIT = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'grep', 'describe', 'branch', 'tag', 'remote', 'worktree', 'stash']);
 const PYTHON_CHECK_MODULES = new Set(['pytest', 'unittest', 'mypy', 'ruff', 'pyright']);
 const VERSION_TOOLS = new Map([
   ['node', ['--version']], ['npm', ['--version']], ['git', ['--version']], ['rg', ['--version']],
@@ -82,23 +83,27 @@ function relativePathArgument(value) {
   return value;
 }
 
-function observerArguments(operation, args) {
+function observerArguments(operation, args, cwd = null) {
   if (operation === 'read') {
     if (args.length < 1 || args.length > 3) throw new Error('read requires path [start-line] [line-count]');
     relativePathArgument(args[0]);
     if (args.slice(1).some((value) => !/^\d+$/u.test(value))) throw new Error('read line values must be integers');
     if (args[1] !== undefined && (Number(args[1]) < 1 || Number(args[1]) > 1_000_000)) throw new Error('read start line must be 1..1000000');
     if (args[2] !== undefined && (Number(args[2]) < 1 || Number(args[2]) > 200)) throw new Error('read line count must be 1..200');
+    containedPathArgument(args[0], cwd);
   } else if (operation === 'list') {
     if (args.length !== 1) throw new Error('list requires one directory');
     relativePathArgument(args[0]);
+    containedPathArgument(args[0], cwd);
   } else if (operation === 'json') {
     if (args.length < 1 || args.length > 9) throw new Error('json requires path [selector ...]');
     relativePathArgument(args[0]);
     if (args.slice(1).some((value) => !/^[A-Za-z0-9_$.-]+$/u.test(value))) throw new Error('invalid JSON selector');
-  } else if (operation === 'stat') {
-    if (args.length < 1 || args.length > 16) throw new Error('stat requires 1..16 paths');
+    containedPathArgument(args[0], cwd);
+  } else if (['stat', 'count', 'hash'].includes(operation)) {
+    if (args.length < 1 || args.length > 16) throw new Error(`${operation} requires 1..16 paths`);
     args.forEach(relativePathArgument);
+    args.forEach((value) => containedPathArgument(value, cwd));
   }
   return { file: INTERNAL_OBSERVER, args: [operation, ...args] };
 }
@@ -250,6 +255,32 @@ function safeBenchmark(args, cwd = null) {
 
 function safeGitArguments(args) {
   if (!READ_ONLY_GIT.has(args[0])) throw new Error('Unsupported mutating git operation');
+  const [subcommand, ...rest] = args;
+  if (subcommand === 'branch') {
+    const safe = rest.length === 0
+      || (rest.length === 1 && ['--show-current', '--list', '-a', '-r', '-v', '-vv'].includes(rest[0]))
+      || (rest.length === 2 && ['--list', '-l'].includes(rest[0]) && !rest[1].startsWith('-'));
+    if (!safe) throw new Error('Unsupported mutating git branch operation');
+  } else if (subcommand === 'tag') {
+    const safe = rest.length === 0
+      || (rest.length === 1 && ['--list', '-l'].includes(rest[0]))
+      || (rest.length === 2 && ['--list', '-l'].includes(rest[0]) && !rest[1].startsWith('-'));
+    if (!safe) throw new Error('Unsupported mutating git tag operation');
+  } else if (subcommand === 'remote') {
+    const safe = rest.length === 0 || (rest.length === 1 && rest[0] === '-v')
+      || (rest.length >= 2 && rest.length <= 3 && rest[0] === 'get-url'
+        && (rest.length === 2 || ['--all', '--push'].includes(rest[1]))
+        && /^[A-Za-z0-9_.-]+$/u.test(rest.at(-1)));
+    if (!safe) throw new Error('Unsupported mutating git remote operation');
+  } else if (subcommand === 'worktree') {
+    if (!(rest[0] === 'list' && rest.slice(1).every((value) => ['--porcelain', '-v'].includes(value)))) {
+      throw new Error('Unsupported mutating git worktree operation');
+    }
+  } else if (subcommand === 'stash') {
+    if (!(rest[0] === 'list' && rest.slice(1).every((value) => ['--oneline'].includes(value)))) {
+      throw new Error('Unsupported mutating git stash operation');
+    }
+  }
   const unsafe = args.slice(1).some((value) => /^(?:-c|--(?:config|exec-path|ext-diff|no-index|output|paginate|textconv))(?:=|$)/iu.test(value)
     || /^(?:-O|--open-files-in-pager)(?:=|$)/iu.test(value));
   if (unsafe) throw new Error('Unsupported git execution or output option');
@@ -299,7 +330,7 @@ export function commandFor(operation, argument, cwd = null) {
   }
   if (operation === 'search') return searchCommand(args, cwd);
   if (operation === 'files') return { file: 'rg', args: ['--no-config', '--files', filesDirectory(argument, cwd)] };
-  if (['read', 'list', 'json', 'stat'].includes(operation)) return observerArguments(operation, args);
+  if (['read', 'list', 'json', 'stat', 'count', 'hash'].includes(operation)) return observerArguments(operation, args, cwd);
   if (operation === 'check') return checkCommand(args);
   if (operation === 'deps') return dependencyCommand(args);
   if (operation === 'version') return versionCommand(args);
@@ -405,6 +436,18 @@ export function semanticFacts(text, operation, command = { args: [] }) {
   if (operation === 'list') return `entries=${lines.length}`;
   if (operation === 'json') return `keys=${lines.length}`;
   if (operation === 'stat') return `entries=${lines.length}`;
+  if (operation === 'count') {
+    const totals = lines.reduce((sum, line) => {
+      const [lineCount = '0', wordCount = '0', byteCount = '0'] = line.split('\t');
+      return {
+        lines: sum.lines + Number(lineCount),
+        words: sum.words + Number(wordCount),
+        bytes: sum.bytes + Number(byteCount),
+      };
+    }, { lines: 0, words: 0, bytes: 0 });
+    return `files=${lines.length}|lines=${totals.lines}|words=${totals.words}|bytes=${totals.bytes}`;
+  }
+  if (operation === 'hash') return `files=${lines.length}|algorithm=sha256`;
   if (operation === 'deps') return `packages=${lines.length}`;
   if (operation === 'version') return `lines=${lines.length}`;
   if (operation === 'check') {
@@ -418,6 +461,15 @@ export function semanticFacts(text, operation, command = { args: [] }) {
     const warnings = lines.filter((line) => /(?:^|\s)warnings?(?:\s|:|$)/iu.test(line)).length;
     return `errors=${errors}|warnings=${warnings}|lines=${lines.length}`;
   }
+  if (operation === 'terminal') {
+    const executable = basename(String(command.file ?? '')).toLowerCase().replace(/\.exe$/u, '');
+    if (executable === 'git') return semanticFacts(text, 'git', command);
+    if (executable === 'rg') return semanticFacts(text, command.args?.includes('--files') ? 'files' : 'search', command);
+    const passed = Number(/(?:^|\s)(\d+) passed\b/iu.exec(text)?.[1] ?? 0);
+    const failed = Number(/(?:^|\s)(\d+) failed\b/iu.exec(text)?.[1] ?? 0);
+    const errors = Number(/(?:^|\s)(\d+) errors?\b/iu.exec(text)?.[1] ?? 0);
+    if (passed || failed || errors) return `pass=${passed}|fail=${failed + errors}`;
+  }
   if (operation === 'git') {
     const subcommand = command.args?.[0];
     if (subcommand === 'status') return `changes=${lines.length}`;
@@ -425,7 +477,10 @@ export function semanticFacts(text, operation, command = { args: [] }) {
     if (subcommand === 'grep') return `matches=${lines.length}`;
     if (subcommand === 'log') return `records=${lines.length}`;
     if (subcommand === 'diff' || subcommand === 'show') {
-      if (command.args.includes('--check')) return `issues=${lines.length}`;
+      if (command.args.includes('--check')) {
+        const issues = lines.filter((line) => !/^warning: in the working copy of .+ (?:LF will be replaced by CRLF|CRLF will be replaced by LF)/iu.test(line));
+        return `issues=${issues.length}`;
+      }
       const files = lines.filter((line) => line.startsWith('diff --git ')).length;
       if (files === 0) return `lines=${lines.length}`;
       const hunks = lines.filter((line) => line.startsWith('@@')).length;
@@ -459,16 +514,18 @@ function compact({ exitCode, stdout, stderr, operation, command, cwd, rawBytesOv
   const factText = operation === 'git' && command.args?.[0] === 'diff' && command.args.includes('--check') ? (stdout ?? '') : text;
   const semantic = semanticFacts(factText, operation, command);
   const facts = operation === 'check' ? `check=${exitCode === 0 ? 'pass' : 'fail'}|${semantic}` : semantic;
-  const completeCheck = exitCode === 0 && (facts.startsWith('check=pass')
-    || (operation === 'git' && command.args?.[0] === 'diff' && command.args.includes('--check') && facts === 'issues=0'));
+  const gitDiffCheck = command.args?.[0] === 'diff' && command.args.includes('--check')
+    && (operation === 'git' || (operation === 'terminal' && /(?:^|[\\/])git(?:\.exe)?$/iu.test(String(command.file ?? ''))));
+  const completeCheck = exitCode === 0 && (facts.startsWith('check=pass') || (gitDiffCheck && facts === 'issues=0'));
   const successfulTest = ['test', 'pytest'].includes(operation) && exitCode === 0;
+  const successfulTerminalTest = operation === 'terminal' && exitCode === 0 && facts.startsWith('pass=') && facts.includes('|fail=0');
   const warningFreeCheck = operation === 'check' && exitCode === 0 && (semantic.startsWith('errors=0|warnings=0') || semantic.startsWith('pass='));
   const completeOutput = completeCheck && (operation !== 'check' || warningFreeCheck);
-  const suppressSample = successfulTest || completeOutput || (operation === 'process' && exitCode === 0);
+  const suppressSample = successfulTest || successfulTerminalTest || completeOutput || (operation === 'process' && exitCode === 0);
   const sampleInput = exitCode === 0 ? evidenceText(text, operation, command, exitCode) : `${stderr || ''}\n${stdout || ''}`;
   const sample = suppressSample ? '' : evidenceSample(sampleInput, 104, exitCode !== 0, cwd);
   const sampledBytes = Buffer.byteLength(sample, 'utf8');
-  const more = completeOutput || successfulTest ? false : rawBytes > sampledBytes;
+  const more = completeOutput || successfulTest || successfulTerminalTest ? false : rawBytes > sampledBytes;
   const exitFact = exitCode === 0 ? '' : `|exit=${exitCode}`;
   const prefix = `${exitCode === 0 ? 'OK' : 'FAIL'}|calls=1${exitFact}|${facts}${more ? '|more=1' : ''}${sample ? `|sample=${sample}` : ''}`;
   const compactText = withSuffix(prefix, `|raw=${rawBytes}`, 220);
@@ -515,9 +572,9 @@ export async function runCommand({ command, cwd, operation = null, timeoutMillis
 
 const SUPERVISED_CAPTURE_BYTES = 2 * 1024 * 1024;
 
-function supervisedEnvironment(operation) {
-  const childEnvironment = { ...process.env };
-  delete childEnvironment.NODE_TEST_CONTEXT;
+function supervisedEnvironment(operation, overrides = {}) {
+  const childEnvironment = { ...process.env, ...overrides };
+  if (!Object.hasOwn(overrides, 'NODE_TEST_CONTEXT')) delete childEnvironment.NODE_TEST_CONTEXT;
   if (operation === 'pytest' || operation === 'check') childEnvironment.PYTHONDONTWRITEBYTECODE = '1';
   return childEnvironment;
 }
@@ -533,9 +590,15 @@ function stopProcessTree(child) {
   }
 }
 
-export async function runSupervisedOperation({ operation, argument, cwd, timeoutMilliseconds }) {
+export async function runSupervisedCommand({
+  command,
+  cwd,
+  operation = 'terminal',
+  timeoutMilliseconds,
+  responseMode = 'compact',
+  maxBytes = 8192,
+}) {
   assertWorkingDirectory(cwd);
-  const command = commandFor(operation, argument, cwd);
   const timeout = commandTimeout(timeoutMilliseconds);
   const started = Date.now();
   if (command.file === INTERNAL_OBSERVER) {
@@ -549,6 +612,9 @@ export async function runSupervisedOperation({ operation, argument, cwd, timeout
     let rawBytes = 0;
     let timedOut = false;
     let settled = false;
+    let spawnErrorCode = null;
+    let timeoutTimer;
+    let killFallback;
 
     const append = (value) => {
       let chunk = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
@@ -580,33 +646,67 @@ export async function runSupervisedOperation({ operation, argument, cwd, timeout
       clearTimeout(timeoutTimer);
       clearTimeout(killFallback);
       const captured = Buffer.concat(chunks, retainedBytes).toString('utf8');
-      resolveResult({ exitCode, captured, rawBytes });
+      resolveResult({ exitCode, captured, rawBytes, spawnErrorCode });
     };
 
-    const child = spawn(command.file, command.args, {
-      cwd,
-      env: supervisedEnvironment(operation),
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    let child;
+    try {
+      child = spawn(command.file, command.args, {
+        cwd,
+        env: supervisedEnvironment(operation, command.envOverrides),
+        windowsHide: true,
+        detached: process.platform !== 'win32',
+        stdio: [command.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      spawnErrorCode = typeof error.code === 'string' ? error.code : 'SPAWN_ERROR';
+      append(`spawn ${command.file} ${error.code ?? error.message}\n`);
+      finish(1);
+      return;
+    }
+    if (command.stdin !== undefined) {
+      child.stdin?.end(command.stdin);
+      child.stdin?.on('error', (error) => append(`${error.message}\n`));
+    }
     child.stdout?.on('data', append);
     child.stderr?.on('data', append);
-    child.on('error', (error) => { append(`${error.message}\n`); finish(1); });
+    child.on('error', (error) => {
+      spawnErrorCode = typeof error.code === 'string' ? error.code : 'SPAWN_ERROR';
+      append(`${error.message}\n`);
+      finish(1);
+    });
     child.on('close', (code) => finish(timedOut ? 124 : (Number.isInteger(code) ? code : 1)));
 
-    const timeoutTimer = setTimeout(() => {
+    timeoutTimer = setTimeout(() => {
       timedOut = true;
       append(`HelioTerm timeout after ${timeout}ms\n`);
       stopProcessTree(child);
     }, timeout);
     timeoutTimer.unref?.();
-    const killFallback = setTimeout(() => {
+    killFallback = setTimeout(() => {
       if (timedOut) finish(124);
     }, timeout + 10_000);
     killFallback.unref?.();
   });
 
+  const durationMilliseconds = Date.now() - started;
+  const evidenceBody = clipUtf8(result.captured.replace(/\u0000/gu, ''), 32 * 1024);
+  if (responseMode === 'evidence') {
+    return {
+      ...evidenceOutput({
+        exitCode: result.exitCode,
+        stdout: result.captured,
+        operation,
+        command,
+        maxBytes,
+        rawBytesOverride: result.rawBytes,
+      }),
+      durationMilliseconds,
+      modelPolls: 0,
+      evidenceBody,
+      spawnErrorCode: result.spawnErrorCode,
+    };
+  }
   const compacted = compact({
     exitCode: result.exitCode,
     stdout: result.captured,
@@ -616,10 +716,101 @@ export async function runSupervisedOperation({ operation, argument, cwd, timeout
     cwd,
     rawBytesOverride: result.rawBytes,
   });
-  return { ...compacted, command, operation, durationMilliseconds: Date.now() - started, modelPolls: 0 };
+  return {
+    ...compacted,
+    command,
+    operation,
+    exitCode: result.exitCode,
+    rawBytes: result.rawBytes,
+    evidenceBody,
+    spawnErrorCode: result.spawnErrorCode,
+    durationMilliseconds,
+    modelPolls: 0,
+  };
+}
+
+export async function runSupervisedOperation({ operation, argument, cwd, timeoutMilliseconds, responseMode, maxBytes }) {
+  assertWorkingDirectory(cwd);
+  return runSupervisedCommand({
+    command: commandFor(operation, argument, cwd),
+    cwd,
+    operation,
+    timeoutMilliseconds,
+    responseMode,
+    maxBytes,
+  });
 }
 
 export async function runOperation({ operation, argument, cwd, timeoutMilliseconds }) {
   assertWorkingDirectory(cwd);
   return runCommand({ command: commandFor(operation, argument, cwd), cwd, operation, timeoutMilliseconds });
+}
+
+export function evidenceOutput({
+  exitCode,
+  stdout = '',
+  stderr = '',
+  operation,
+  command,
+  maxBytes,
+  rawBytesOverride = null,
+  facts = [],
+}) {
+  const rawText = `${stdout}${stderr}`;
+  const rawBytes = rawBytesOverride ?? Buffer.byteLength(rawText, 'utf8');
+  const body = clipUtf8(rawText.replace(/\u0000/gu, ''), maxBytes);
+  const shownBytes = Buffer.byteLength(body, 'utf8');
+  const more = shownBytes < rawBytes;
+  const exitFact = exitCode === 0 ? '' : `|exit=${exitCode}`;
+  const factText = facts.length ? `|${facts.join('|')}` : '';
+  const header = `${exitCode === 0 ? 'OK' : 'FAIL'}|calls=1${exitFact}|evidence=1|operation=${operation}|raw=${rawBytes}|shown=${shownBytes}${more ? '|more=1' : ''}${factText}|model=0`;
+  const text = body ? `${header}\n${body}` : header;
+  return {
+    text,
+    pass: exitCode === 0,
+    exitCode,
+    rawBytes,
+    shownBytes,
+    more,
+    command,
+    operation,
+    savings: rawBytesOverride === null
+      ? measureTokenSavings({ rawText, compactText: text })
+      : measureTokenSavingsFromBytes({ rawBytes, compactText: text }),
+  };
+}
+
+export async function runEvidenceOperation({ operation, argument, cwd, maxBytes = 8192, timeoutMilliseconds }) {
+  assertWorkingDirectory(cwd);
+  if (!EVIDENCE_OPERATIONS.has(operation)) throw new Error('evidence mode requires an allowlisted evidence operation');
+  if (!Number.isInteger(maxBytes) || maxBytes < 256 || maxBytes > 32 * 1024) throw new Error('maxBytes must be 256..32768');
+  const command = commandFor(operation, argument, cwd);
+  const timeout = commandTimeout(timeoutMilliseconds);
+  try {
+    if (command.file === INTERNAL_OBSERVER) {
+      const stdout = runObserver({ operation: command.args[0], args: command.args.slice(1), cwd });
+      return evidenceOutput({ exitCode: 0, stdout, operation, command, maxBytes });
+    }
+    const { stdout, stderr } = await execFileAsync(command.file, command.args, {
+      cwd,
+      env: supervisedEnvironment(operation),
+      windowsHide: true,
+      timeout,
+      maxBuffer: 2 * 1024 * 1024,
+      encoding: 'utf8',
+    });
+    return evidenceOutput({ exitCode: 0, stdout, stderr, operation, command, maxBytes });
+  } catch (error) {
+    const exitCode = Number.isInteger(error.code) ? error.code : 1;
+    const emptyObservation = exitCode === 1 && !String(error.stderr ?? '').trim() && operation === 'search';
+    if (emptyObservation) return evidenceOutput({ exitCode: 0, stdout: error.stdout ?? '', operation, command, maxBytes });
+    return evidenceOutput({
+      exitCode,
+      stdout: error.stdout ?? '',
+      stderr: error.stderr || error.message,
+      operation,
+      command,
+      maxBytes,
+    });
+  }
 }

@@ -7,10 +7,10 @@ import { validateRequest } from '../scripts/firewall.mjs';
 import { runDirectBatch } from '../scripts/direct-runner.mjs';
 import { commandFor, INTERNAL_OBSERVER, OPERATIONS, semanticFacts } from '../scripts/kernel.mjs';
 
-test('exposes fifteen bounded operation classes', () => {
+test('exposes seventeen bounded operation classes', () => {
   assert.deepEqual([...OPERATIONS].sort(), [
-    'bench', 'build', 'check', 'deps', 'files', 'git', 'json', 'list', 'process',
-    'pytest', 'read', 'search', 'stat', 'test', 'version',
+    'bench', 'build', 'check', 'count', 'deps', 'files', 'git', 'hash', 'json', 'list',
+    'process', 'pytest', 'read', 'search', 'stat', 'test', 'version',
   ]);
 });
 
@@ -20,6 +20,8 @@ test('accepts repository inspection and rejects path escape', () => {
     'T|list|tests',
     'T|json|package.json name scripts',
     'T|stat|package.json scripts/kernel.mjs',
+    'T|count|package.json scripts/kernel.mjs',
+    'T|hash|package.json scripts/kernel.mjs',
   ]) assert.equal(validateRequest(request).pass, true, request);
 
   for (const request of [
@@ -29,6 +31,8 @@ test('accepts repository inspection and rejects path escape', () => {
     'T|list|C:\\Windows',
     'T|json|/etc/passwd',
     'T|stat|scripts/../package.json',
+    'T|count|../secret.txt',
+    'T|hash|C:\\Windows\\win.ini',
   ]) assert.equal(validateRequest(request).pass, false, request);
 });
 
@@ -63,6 +67,8 @@ test('maps expanded commands without a shell', () => {
   const read = commandFor('read', 'package.json 1 5');
   assert.equal(read.file, INTERNAL_OBSERVER);
   assert.deepEqual(read.args, ['read', 'package.json', '1', '5']);
+  assert.deepEqual(commandFor('count', 'package.json').args, ['count', 'package.json']);
+  assert.deepEqual(commandFor('hash', 'package.json').args, ['hash', 'package.json']);
   assert.equal(commandFor('check', 'node --check scripts/kernel.mjs').file, process.execPath);
   assert.deepEqual(commandFor('check', 'py -m pytest tests').args, ['-m', 'pytest', '-p', 'no:cacheprovider', 'tests']);
   assert.deepEqual(commandFor('version', 'git'), { file: 'git', args: ['--version'] });
@@ -108,6 +114,18 @@ test('disables repository-configured external Git diff and text conversion', () 
   assert.deepEqual(commandFor('git', 'status --short').args, ['status', '--short']);
 });
 
+test('covers common read-only Git inventory while rejecting mixed-command mutations', () => {
+  for (const argument of [
+    'branch --show-current', 'branch --list codex/*', 'tag --list v*', 'remote -v',
+    'remote get-url origin', 'worktree list --porcelain', 'stash list --oneline',
+  ]) assert.doesNotThrow(() => commandFor('git', argument), argument);
+
+  for (const argument of [
+    'branch new-name', 'branch -D old-name', 'tag v1.0.0', 'tag --delete v1.0.0',
+    'remote set-url origin https://example.com/repo.git', 'worktree remove other', 'stash drop',
+  ]) assert.throws(() => commandFor('git', argument), /mutating git/u, argument);
+});
+
 test('rejects repository-relative symlinks that resolve outside the working directory', () => {
   const parent = mkdtempSync(join(tmpdir(), 'helioterm-containment-'));
   const root = join(parent, 'root');
@@ -121,6 +139,9 @@ test('rejects repository-relative symlinks that resolve outside the working dire
     assert.throws(() => commandFor('search', 'outside escape', root), /inside the working directory/u);
     assert.throws(() => commandFor('files', 'escape', root), /inside the working directory/u);
     assert.throws(() => commandFor('bench', 'escape/tool.mjs', root), /inside the working directory/u);
+    assert.throws(() => commandFor('read', 'escape/secret.txt 1 5', root), /inside the working directory/u);
+    assert.throws(() => commandFor('count', 'escape/secret.txt', root), /inside the working directory/u);
+    assert.throws(() => commandFor('hash', 'escape/secret.txt', root), /inside the working directory/u);
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }
@@ -163,6 +184,16 @@ test('runs four expanded observations in one compressed result', async () => {
   assert.ok(result.savings.savedEstimatedTokens > 0);
 });
 
+test('counts and hashes project files without external commands', async () => {
+  const result = await runDirectBatch({
+    cwd: process.cwd(),
+    requests: ['T|count|package.json scripts/kernel.mjs', 'T|hash|package.json scripts/kernel.mjs'],
+  });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /ops=count\/2,hash\/2/u);
+  assert.match(result.text, /model=0$/u);
+});
+
 test('compresses successful generic checks, dependencies, and versions', async () => {
   const result = await runDirectBatch({
     cwd: process.cwd(),
@@ -181,6 +212,8 @@ test('summarizes new operation output without a model', () => {
   assert.equal(semanticFacts('1:a\n2:b\n', 'read'), 'lines=2');
   assert.equal(semanticFacts('file\t1\ta\ndir\t0\tb\n', 'list'), 'entries=2');
   assert.equal(semanticFacts('name="x"\nscripts={3}\n', 'json'), 'keys=2');
+  assert.equal(semanticFacts('2\t3\t10\ta.txt\n4\t5\t20\tb.txt\n', 'count'), 'files=2|lines=6|words=8|bytes=30');
+  assert.equal(semanticFacts('sha256\t10\tabcd\ta.txt\n', 'hash'), 'files=1|algorithm=sha256');
   assert.equal(semanticFacts('warning: x\nerror: y\n', 'check'), 'errors=1|warnings=1|lines=2');
   assert.equal(semanticFacts('34 passed in 0.12s\n', 'check', { args: ['-m', 'pytest'] }), 'pass=34|fail=0');
 });

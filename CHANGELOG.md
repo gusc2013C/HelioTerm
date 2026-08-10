@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 - 2026-08-10
+
+- Register the structured MCP server as the primary Desktop terminal interface while retaining a short `ht`/`helioterm` executable for existing tasks whose MCP projection is fixed until a new task starts.
+- Add concise deterministic, arbitrary-program, explicit-shell, background start, one-shot wait, cancellation, evidence, stdin, environment, timeout, and semantic-routing syntax without the absolute runner path or `T|...` envelope.
+- Add a universal shell-free terminal transport with bounded evidence, Windows command-shim hardening, truthful destructive/open-world annotations, and adaptive Luna routing for material command results.
+- Let arbitrary background work persist across Desktop restarts, retain bounded evidence, erase command/environment/stdin payloads after completion or cancellation, and stop the complete process tree on cancellation.
+- Validate real Desktop-native Luna/high takeover and same-task Luna/xhigh reuse through one-use tickets, deterministic `model=luna` acceptance, and mandatory archival.
+
 ## 0.1.1 - 2026-08-09
 
 - Add `supervise` plus persistent `job_start`/`job_wait` MCP paths so minute- and hour-scale commands can run without model polling while other Codex work continues; retain only a bounded log tail and persist final state across Desktop task restarts.

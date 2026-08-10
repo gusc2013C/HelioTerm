@@ -2,16 +2,17 @@
 
 import { pathToFileURL } from 'node:url';
 import readline from 'node:readline';
-import { OPERATIONS, commandFor, parseArguments, runOperation, runSupervisedOperation } from './kernel.mjs';
+import { OPERATIONS, commandFor, evidenceOutput, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 import { acceptAdaptiveLunaResponse, attachAdaptiveRoute, contextForAdaptiveTicket } from './adaptive-channel.mjs';
-import { startBackgroundJob, waitBackgroundJob } from './job-manager.mjs';
+import { cancelBackgroundJob, startBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
 import { createTokenSavingsMeter, formatTokenSavings, replaceCompactTokenSavings } from './token-savings.mjs';
+import { runTerminalCommand, terminalSpecFromArguments, TERMINAL_SHELLS } from './terminal-transport.mjs';
 
-export { commandFor, parseArguments, runOperation, runSupervisedOperation } from './kernel.mjs';
+export { commandFor, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 
-const VERSION = '0.1.1';
+const VERSION = '0.2.0';
 export const OBSERVATION_OPERATIONS = Object.freeze([
-  'git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'deps', 'version',
+  'git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'deps', 'version',
 ]);
 const executionProperties = {
   operation: { type: 'string', enum: [...OPERATIONS] },
@@ -21,24 +22,57 @@ const executionProperties = {
   semantic: { type: 'boolean', default: false },
 };
 const executionAnnotations = { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false };
+const evidenceProperties = {
+  responseMode: { type: 'string', enum: ['compact', 'evidence'], default: 'compact' },
+  maxBytes: { type: 'integer', minimum: 256, maximum: 32768, default: 8192 },
+};
+const terminalProperties = {
+  program: { type: 'string', minLength: 1, maxLength: 1024 },
+  args: { type: 'array', maxItems: 128, items: { type: 'string', maxLength: 8192 }, default: [] },
+  shell: { type: 'string', enum: TERMINAL_SHELLS },
+  script: { type: 'string', maxLength: 65536 },
+  env: { type: 'object', maxProperties: 64, additionalProperties: { type: 'string', maxLength: 8192 }, default: {} },
+  stdin: { type: 'string', maxLength: 262144 },
+  cwd: executionProperties.cwd,
+  timeoutSeconds: { type: 'integer', minimum: 1, maximum: 43200, default: 240 },
+  adaptive: executionProperties.adaptive,
+  semantic: executionProperties.semantic,
+  ...evidenceProperties,
+};
+function terminalInputSchema({ timeoutRequired = false, includeResponse = true } = {}) {
+  const properties = includeResponse
+    ? terminalProperties
+    : Object.fromEntries(Object.entries(terminalProperties).filter(([name]) => !['responseMode', 'maxBytes', 'adaptive', 'semantic'].includes(name)));
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['cwd', ...(timeoutRequired ? ['timeoutSeconds'] : [])],
+    properties,
+  };
+}
+const terminalAnnotations = { readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: false };
 
 export const OBSERVE_TOOL = {
   name: 'observe',
   title: 'Observe one project fact',
-  description: 'Run one allowlisted read-only, shell-free project observation and return a compact result line.',
+  description: 'Run one allowlisted read-only, shell-free project observation. Return a compact result by default, or explicitly bounded exact evidence when responseMode=evidence.',
   inputSchema: {
     type: 'object', additionalProperties: false, required: ['operation', 'argument', 'cwd'],
-    properties: { ...executionProperties, operation: { type: 'string', enum: OBSERVATION_OPERATIONS } },
+    properties: {
+      ...executionProperties,
+      operation: { type: 'string', enum: OBSERVATION_OPERATIONS },
+      ...evidenceProperties,
+    },
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
 };
 export const TOOL = {
   name: 'run',
   title: 'Run one HelioTerm operation',
-  description: 'Execute one deterministic shell-free operation and return one compact result line.',
+  description: 'Execute one deterministic shell-free operation and return compact facts by default or bounded evidence when explicitly requested.',
   inputSchema: {
     type: 'object', additionalProperties: false, required: ['operation', 'argument', 'cwd'],
-    properties: executionProperties,
+    properties: { ...executionProperties, ...evidenceProperties },
   },
   annotations: executionAnnotations,
 };
@@ -81,9 +115,41 @@ export const JOB_WAIT_TOOL = {
       timeoutSeconds: { type: 'integer', minimum: 1, maximum: 43200 },
       adaptive: { type: 'boolean', default: true },
       semantic: { type: 'boolean', default: false },
+      ...evidenceProperties,
     },
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+};
+export const JOB_CANCEL_TOOL = {
+  name: 'job_cancel',
+  title: 'Cancel one background command',
+  description: 'Stop the process tree for one HelioTerm background handle and erase any persisted arbitrary command payload.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['job'],
+    properties: { job: { type: 'string', pattern: '^[A-Za-z0-9_-]{16}$' } },
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: true },
+};
+export const TERMINAL_TOOL = {
+  name: 'terminal',
+  title: 'Run any terminal command',
+  description: 'Run one arbitrary non-interactive command through HelioTerm. Provide either program plus args, or shell plus script. Prefer program mode; output is compressed by default.',
+  inputSchema: terminalInputSchema(),
+  annotations: terminalAnnotations,
+};
+export const TERMINAL_SUPERVISE_TOOL = {
+  name: 'terminal_supervise',
+  title: 'Supervise any long terminal command',
+  description: 'Run one arbitrary long non-interactive command while HelioTerm waits locally and returns once without model polling.',
+  inputSchema: terminalInputSchema({ timeoutRequired: true }),
+  annotations: terminalAnnotations,
+};
+export const TERMINAL_START_TOOL = {
+  name: 'terminal_start',
+  title: 'Start any background terminal command',
+  description: 'Start one arbitrary non-interactive command in a persistent local worker and return a handle immediately.',
+  inputSchema: terminalInputSchema({ timeoutRequired: true, includeResponse: false }),
+  annotations: terminalAnnotations,
 };
 export const SAVINGS_TOOL = {
   name: 'savings',
@@ -116,7 +182,8 @@ export const LUNA_ACCEPT_TOOL = {
   annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false },
 };
 export const TOOLS = Object.freeze([
-  OBSERVE_TOOL, TOOL, SUPERVISE_TOOL, JOB_START_TOOL, JOB_WAIT_TOOL,
+  OBSERVE_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_SUPERVISE_TOOL,
+  JOB_START_TOOL, TERMINAL_START_TOOL, JOB_WAIT_TOOL, JOB_CANCEL_TOOL,
   SAVINGS_TOOL, LUNA_CONTEXT_TOOL, LUNA_ACCEPT_TOOL,
 ]);
 const savingsMeter = createTokenSavingsMeter();
@@ -163,6 +230,21 @@ function contentResult(text, { isError = false, structuredContent } = {}) {
 async function handleExecution(message, mode) {
   const args = message.params.arguments ?? {};
   if (mode === 'observe' && !OBSERVATION_OPERATIONS.includes(args.operation)) throw new Error('observe requires a read-only operation');
+  if (['observe', 'run'].includes(mode) && args.responseMode === 'evidence') {
+    const observed = await runEvidenceOperation({ ...args, maxBytes: args.maxBytes ?? 8192 });
+    savingsMeter.record(observed.savings);
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(observed.text, {
+      isError: !observed.pass,
+      structuredContent: {
+        operation: observed.operation,
+        rawBytes: observed.rawBytes,
+        shownBytes: observed.shownBytes,
+        clipped: observed.more,
+        modelPolls: 0,
+      },
+    }) });
+    return;
+  }
   const supervised = mode === 'supervise';
   const observed = supervised
     ? await runSupervisedOperation({ ...args, timeoutMilliseconds: args.timeoutSeconds * 1000 })
@@ -176,12 +258,59 @@ async function handleExecution(message, mode) {
   }) });
 }
 
+async function handleTerminalExecution(message, mode) {
+  const args = message.params.arguments ?? {};
+  const terminal = terminalSpecFromArguments(args);
+  if (mode === 'terminal_start') {
+    const started = startBackgroundTerminalJob({ terminal, cwd: args.cwd, timeoutMilliseconds: args.timeoutSeconds * 1000 });
+    const text = `MORE|calls=0|status=queued|job=${started.handle}|background=1|terminal=1|polls=0|model=0`;
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+      structuredContent: { job: started.handle, status: started.status, timeoutMilliseconds: started.timeoutMilliseconds, modelPolls: 0 },
+    }) });
+    return;
+  }
+  const supervised = mode === 'terminal_supervise';
+  const observed = await runTerminalCommand({
+    terminal,
+    cwd: args.cwd,
+    timeoutMilliseconds: (args.timeoutSeconds ?? 240) * 1000,
+    responseMode: args.responseMode ?? 'compact',
+    maxBytes: args.maxBytes ?? 8192,
+  });
+  if (args.responseMode === 'evidence') {
+    savingsMeter.record(observed.savings);
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(observed.text, {
+      isError: !observed.pass,
+      structuredContent: {
+        terminal: true,
+        rawBytes: observed.rawBytes,
+        shownBytes: observed.shownBytes,
+        clipped: observed.more,
+        waitedMilliseconds: observed.durationMilliseconds,
+        modelPolls: 0,
+        windowsShimRetry: observed.windowsShimRetry === true,
+      },
+    }) });
+    return;
+  }
+  const facts = ['terminal=1', ...(observed.windowsShimRetry ? ['shim=windows'] : []), ...(supervised ? ['wait=internal', 'polls=0'] : []), `ms=${observed.durationMilliseconds}`];
+  const result = routeResult(observed, { ...args, cwd: args.cwd }, facts);
+  savingsMeter.record(result.savings);
+  send({ jsonrpc: '2.0', id: message.id, result: contentResult(result.text, {
+    isError: result.text.startsWith('FAIL|'),
+    structuredContent: { terminal: true, waitedMilliseconds: observed.durationMilliseconds, modelPolls: 0, windowsShimRetry: observed.windowsShimRetry === true },
+  }) });
+}
+
 async function handle(message) {
   if (message.id == null) return;
   try {
     if (message.method === 'initialize') send({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: message.params?.protocolVersion ?? '2025-06-18', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'helioterm', version: VERSION } } });
     else if (message.method === 'ping') send({ jsonrpc: '2.0', id: message.id, result: {} });
     else if (message.method === 'tools/list') send({ jsonrpc: '2.0', id: message.id, result: { tools: TOOLS } });
+    else if (message.method === 'tools/call' && ['terminal', 'terminal_supervise', 'terminal_start'].includes(message.params?.name)) {
+      await handleTerminalExecution(message, message.params.name);
+    }
     else if (message.method === 'tools/call' && ['observe', 'run', 'supervise'].includes(message.params?.name)) {
       await handleExecution(message, message.params.name);
     } else if (message.method === 'tools/call' && message.params?.name === 'job_start') {
@@ -201,6 +330,32 @@ async function handle(message) {
         }) });
       } else if (waited.state.result) {
         const stored = waited.state.result;
+        if (args.responseMode === 'evidence') {
+          const evidence = evidenceOutput({
+            exitCode: stored.exitCode ?? (stored.text?.startsWith('FAIL|') ? 1 : 0),
+            stdout: stored.evidenceBody ?? stored.adaptiveEvidence ?? '',
+            operation: waited.state.operation,
+            command: stored.command,
+            maxBytes: args.maxBytes ?? 8192,
+            rawBytesOverride: stored.rawBytes ?? stored.savings?.rawBytes ?? null,
+            facts: ['background=1', `job=${args.job}`, 'polls=0', `waitMs=${waited.waitedMilliseconds}`],
+          });
+          savingsMeter.record(evidence.savings);
+          send({ jsonrpc: '2.0', id: message.id, result: contentResult(evidence.text, {
+            isError: !evidence.pass,
+            structuredContent: {
+              job: args.job,
+              status: waited.state.status,
+              commandMilliseconds: stored.durationMilliseconds,
+              waitedMilliseconds: waited.waitedMilliseconds,
+              modelPolls: 0,
+              rawBytes: evidence.rawBytes,
+              shownBytes: evidence.shownBytes,
+              clipped: evidence.more,
+            },
+          }) });
+          return;
+        }
         const routed = routeResult({
           ...stored,
           operation: waited.state.operation,
@@ -226,6 +381,13 @@ async function handle(message) {
           structuredContent: { job: args.job, status: 'failed', waitedMilliseconds: waited.waitedMilliseconds, modelPolls: 0 },
         }) });
       }
+    } else if (message.method === 'tools/call' && message.params?.name === 'job_cancel') {
+      const args = message.params.arguments ?? {};
+      const cancelled = cancelBackgroundJob(args.job);
+      const text = `OK|calls=0|status=${cancelled.state.status}|job=${args.job}|cancelled=${cancelled.cancelled ? 1 : 0}|background=1|model=0`;
+      send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+        structuredContent: { job: args.job, status: cancelled.state.status, cancelled: cancelled.cancelled, modelPolls: 0 },
+      }) });
     } else if (message.method === 'tools/call' && message.params?.name === 'savings') {
       send({ jsonrpc: '2.0', id: message.id, result: contentResult(formatTokenSavings(savingsMeter.snapshot())) });
     } else if (message.method === 'tools/call' && message.params?.name === 'luna_context') {
@@ -245,7 +407,7 @@ async function handle(message) {
 }
 
 function isLongRequest(message) {
-  return message.method === 'tools/call' && ['supervise', 'job_wait'].includes(message.params?.name);
+  return message.method === 'tools/call' && ['supervise', 'terminal_supervise', 'job_wait'].includes(message.params?.name);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

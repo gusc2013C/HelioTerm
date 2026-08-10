@@ -1,14 +1,15 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertWorkingDirectory, commandFor, MAX_COMMAND_TIMEOUT_MILLISECONDS } from './kernel.mjs';
+import { terminalCommandFor } from './terminal-transport.mjs';
 
 const HANDLE_PATTERN = /^[A-Za-z0-9_-]{16}$/u;
 const JOB_DIRECTORY = join(tmpdir(), 'helioterm-background-jobs');
-const FINAL_STATES = new Set(['completed', 'failed']);
+const FINAL_STATES = new Set(['completed', 'failed', 'cancelled']);
 const JOB_RETENTION_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
 
 function ensureDirectory() {
@@ -22,6 +23,10 @@ function validateHandle(handle) {
 
 function statePath(handle) {
   return join(JOB_DIRECTORY, `${validateHandle(handle)}.json`);
+}
+
+function cancellationPath(handle) {
+  return join(JOB_DIRECTORY, `${validateHandle(handle)}.cancel`);
 }
 
 function atomicWrite(file, value) {
@@ -51,7 +56,10 @@ function cleanupOldJobs(now = Date.now()) {
     const file = join(JOB_DIRECTORY, name);
     try {
       const state = JSON.parse(readFileSync(file, 'utf8'));
-      if (FINAL_STATES.has(state.status) && now - Date.parse(state.updatedAt) > JOB_RETENTION_MILLISECONDS) unlinkSync(file);
+      if (FINAL_STATES.has(state.status) && now - Date.parse(state.updatedAt) > JOB_RETENTION_MILLISECONDS) {
+        unlinkSync(file);
+        try { unlinkSync(cancellationPath(state.handle)); } catch { /* no cancellation marker */ }
+      }
     } catch {
       try {
         if (now - statSync(file).mtimeMs > JOB_RETENTION_MILLISECONDS) unlinkSync(file);
@@ -69,6 +77,15 @@ export function readBackgroundJob(handle) {
 export function writeBackgroundJob(state) {
   if (!state || state.version !== 1 || state.handle !== validateHandle(state.handle)) throw new Error('invalid background job state');
   atomicWrite(statePath(state.handle), { ...state, updatedAt: new Date().toISOString() });
+}
+
+export function cancellationRequested(handle) {
+  try { return statSync(cancellationPath(handle)).isFile(); } catch { return false; }
+}
+
+export function removeBackgroundJob(handle) {
+  try { unlinkSync(statePath(handle)); } catch { /* already removed */ }
+  try { unlinkSync(cancellationPath(handle)); } catch { /* no cancellation marker */ }
 }
 
 export function startBackgroundJob({ operation, argument, cwd, timeoutMilliseconds }) {
@@ -89,8 +106,12 @@ export function startBackgroundJob({ operation, argument, cwd, timeoutMillisecon
     createdAt: now,
     updatedAt: now,
   };
+  return launchBackgroundWorker(state, timeout);
+}
+
+function launchBackgroundWorker(state, timeout) {
   writeBackgroundJob(state);
-  const worker = spawn(process.execPath, [fileURLToPath(new URL('./job-worker.mjs', import.meta.url)), handle], {
+  const worker = spawn(process.execPath, [fileURLToPath(new URL('./job-worker.mjs', import.meta.url)), state.handle], {
     detached: true,
     windowsHide: true,
     stdio: 'ignore',
@@ -101,7 +122,60 @@ export function startBackgroundJob({ operation, argument, cwd, timeoutMillisecon
     } catch { /* state may already be complete */ }
   });
   worker.unref();
-  return { handle, status: 'queued', timeoutMilliseconds: timeout, workerPid: worker.pid };
+  return { handle: state.handle, status: 'queued', timeoutMilliseconds: timeout, workerPid: worker.pid };
+}
+
+export function startBackgroundTerminalJob({ terminal, cwd, timeoutMilliseconds }) {
+  cleanupOldJobs();
+  assertWorkingDirectory(cwd);
+  terminalCommandFor(terminal);
+  const timeout = validateTimeout(timeoutMilliseconds);
+  const handle = randomBytes(12).toString('base64url');
+  const now = new Date().toISOString();
+  const state = {
+    version: 1,
+    handle,
+    status: 'queued',
+    operation: 'terminal',
+    terminal,
+    cwd,
+    timeoutMilliseconds: timeout,
+    createdAt: now,
+    updatedAt: now,
+  };
+  return launchBackgroundWorker(state, timeout);
+}
+
+function stopWorkerTree(pid) {
+  if (!Number.isInteger(pid) || pid < 1) return;
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    } else process.kill(-pid, 'SIGKILL');
+  } catch {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* worker already exited */ }
+  }
+}
+
+export function cancelBackgroundJob(handle) {
+  let state = readBackgroundJob(handle);
+  if (FINAL_STATES.has(state.status)) return { state, cancelled: false };
+  writeFileSync(cancellationPath(handle), 'cancelled\n', { encoding: 'utf8', mode: 0o600 });
+  state = readBackgroundJob(handle);
+  if (FINAL_STATES.has(state.status)) {
+    try { unlinkSync(cancellationPath(handle)); } catch { /* completion won the race */ }
+    return { state, cancelled: false };
+  }
+  stopWorkerTree(state.workerPid);
+  const cancelled = {
+    ...state,
+    status: 'cancelled',
+    finishedAt: new Date().toISOString(),
+    error: 'cancelled by HelioTerm',
+  };
+  delete cancelled.terminal;
+  writeBackgroundJob(cancelled);
+  return { state: readBackgroundJob(handle), cancelled: true };
 }
 
 export async function waitBackgroundJob({ handle, timeoutMilliseconds }) {

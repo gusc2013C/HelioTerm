@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_HASH_FILE_BYTES = 64 * 1024 * 1024;
 
 function repositoryRoot(cwd) {
   return realpathSync(resolve(cwd));
@@ -86,11 +88,40 @@ function inspectStat(root, args) {
   }).join('\n')}\n`;
 }
 
+function inspectCount(root, args) {
+  if (args.length < 1 || args.length > 16) throw new Error('count requires 1..16 paths');
+  return `${args.map((value) => {
+    const target = repoPath(root, value);
+    const stats = statSync(target);
+    if (!stats.isFile()) throw new Error('count targets must be files');
+    if (stats.size > MAX_FILE_BYTES) throw new Error('count target exceeds 2 MiB');
+    const text = readFileSync(target, 'utf8');
+    if (text.includes('\u0000')) throw new Error('count target must be text');
+    const lines = text.length === 0 ? 0 : text.split(/\r?\n/u).length - (text.endsWith('\n') ? 1 : 0);
+    const words = text.trim() ? text.trim().split(/\s+/u).length : 0;
+    return `${lines}\t${words}\t${stats.size}\t${value}`;
+  }).join('\n')}\n`;
+}
+
+function inspectHash(root, args) {
+  if (args.length < 1 || args.length > 16) throw new Error('hash requires 1..16 paths');
+  return `${args.map((value) => {
+    const target = repoPath(root, value);
+    const stats = statSync(target);
+    if (!stats.isFile()) throw new Error('hash targets must be files');
+    if (stats.size > MAX_HASH_FILE_BYTES) throw new Error('hash target exceeds 64 MiB');
+    const digest = createHash('sha256').update(readFileSync(target)).digest('hex');
+    return `sha256\t${stats.size}\t${digest}\t${value}`;
+  }).join('\n')}\n`;
+}
+
 const handlers = new Map([
   ['read', readText],
   ['list', listDirectory],
   ['json', inspectJson],
   ['stat', inspectStat],
+  ['count', inspectCount],
+  ['hash', inspectHash],
 ]);
 
 export function runObserver({ operation, args, cwd }) {

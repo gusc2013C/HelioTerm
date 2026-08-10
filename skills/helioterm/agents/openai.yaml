@@ -1,6 +1,4 @@
 interface:
   display_name: "HelioTerm"
-  short_description: "Default zero-model terminal compressor"
-  default_prompt: "Use $helioterm for bounded tests, checks, Git, search, source/config inspection, dependency, version, benchmark, and process observations; batch up to four compatible operations."
-policy:
-  allow_implicit_invocation: true
+  short_description: "Universal compressed terminal transport"
+  default_prompt: "Use $helioterm to run every non-interactive terminal command through compressed direct, supervised, or background execution."

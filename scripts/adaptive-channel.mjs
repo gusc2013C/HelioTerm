@@ -83,8 +83,13 @@ export function boundedAdaptiveEvidence(value, cwd = null, maxBytes = ADAPTIVE_E
   return `${head}${marker}${tail}`;
 }
 
+function gitResult(result) {
+  return result.operation === 'git'
+    || (result.operation === 'terminal' && /(?:^|[\\/])git(?:\.exe)?$/iu.test(String(result.command?.file ?? '')));
+}
+
 function materialGitChange(result) {
-  if (result.operation !== 'git') return false;
+  if (!gitResult(result)) return false;
   const subcommand = result.command?.args?.[0];
   if (!['status', 'diff'].includes(subcommand) || result.command?.args?.includes('--check')) return false;
   return ['changes', 'files', 'hunks', 'add', 'del', 'lines']
@@ -109,19 +114,21 @@ function evidenceDiversity(evidence) {
 }
 
 function semanticGitPatch(result) {
-  if (result.operation !== 'git') return false;
+  if (!gitResult(result)) return false;
   const [subcommand, ...args] = result.command?.args ?? [];
   if (!['diff', 'show'].includes(subcommand)) return false;
   return !args.some((value) => /^(?:--check|--name-only|--name-status|--numstat|--shortstat|--stat)(?:=|$)/u.test(value));
 }
 
-function semanticOperationScore(result, { diverseEvidence, diagnosticEvidence }) {
+function semanticOperationScore(result, { diverseEvidence, diagnosticEvidence, semantic }) {
   if (!String(result.text ?? '').startsWith('OK|')) return 4;
   if (semanticGitPatch(result)) return 4;
   if (field(result.text, 'more') !== '1') return 0;
-  const richOperation = ['read', 'search', 'build', 'bench', 'check'].includes(result.operation)
+  const diagnosticOperation = ['build', 'bench', 'check'].includes(result.operation);
+  if (diagnosticOperation && diagnosticEvidence) return 3;
+  const requestedSemanticOperation = ['read', 'search', 'terminal'].includes(result.operation)
     || (result.operation === 'git' && ['log', 'show'].includes(result.command?.args?.[0]));
-  return richOperation && (diverseEvidence || diagnosticEvidence) ? 3 : 0;
+  return semantic && requestedSemanticOperation && (diverseEvidence || diagnosticEvidence) ? 3 : 0;
 }
 
 export function classifyAdaptiveCompression({ results, semantic = false } = {}) {
@@ -134,7 +141,7 @@ export function classifyAdaptiveCompression({ results, semantic = false } = {}) 
   const evidence = entries.map((result) => `[${result.operation}]\n${result.adaptiveEvidence ?? ''}`).join('\n');
   const diverseEvidence = evidenceDiversity(evidence) >= 4;
   const diagnosticEvidence = /(?:^|\b)(?:assert(?:ion)?error|error|exception|fail(?:ed|ure)?|panic|traceback|warn(?:ing)?)(?:\b|:)/iu.test(evidence);
-  const automaticScore = entries.reduce((maximum, result) => Math.max(maximum, semanticOperationScore(result, { diverseEvidence, diagnosticEvidence })), 0);
+  const automaticScore = entries.reduce((maximum, result) => Math.max(maximum, semanticOperationScore(result, { diverseEvidence, diagnosticEvidence, semantic })), 0);
   const semanticScore = semantic && (truncated || materialFailure || materialChange) ? Math.max(3, automaticScore) : automaticScore;
   const semanticSummaryRequired = semanticScore > 0;
   const crossModule = distinctSourceAreas(evidence) > 1;

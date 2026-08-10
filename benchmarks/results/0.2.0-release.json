@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "HELIOTERM_RELEASE_V2",
+  "version": "0.2.0",
+  "date": "2026-08-10",
+  "source": {
+    "testsPassed": 126,
+    "preflightPassed": true,
+    "skillValidationPassed": true,
+    "pluginValidationPassed": true,
+    "gitDiffCheckPassed": true
+  },
+  "shortEntry": {
+    "commands": ["ht", "helioterm"],
+    "globallyLinkedToCurrentSource": true,
+    "runs": 21,
+    "directMedianMilliseconds": 97.98750000000007,
+    "shortMedianMilliseconds": 99.18290000000002,
+    "latencyDifferenceMilliseconds": 1.1953999999999496,
+    "latencyDifferencePercent": 1.219951524429086,
+    "oldCommandBytes": 108,
+    "shortCommandBytes": 45,
+    "commandReductionPercent": 58.33333333333333,
+    "deterministicArgumentBoundariesPassed": true,
+    "explicitCollisionModePassed": true,
+    "universalProgramPassed": true,
+    "windowsLinkedShimPassed": true,
+    "environmentAndStdinPassed": true,
+    "explicitShellPassed": true,
+    "backgroundWaitPassed": true,
+    "backgroundCancelPassed": true
+  },
+  "installedPlugin": {
+    "baseVersion": "0.2.0",
+    "cachebusterPolicy": "single codex timestamp suffix",
+    "testsPassed": 126,
+    "preflightPassed": true,
+    "skillValidationPassed": true,
+    "pluginValidationPassed": true,
+    "keySourceCacheHashesMatched": 10,
+    "mcpToolCount": 12,
+    "installedJsonRpcTerminalCallPassed": true,
+    "installedJsonRpcModelPolls": 0,
+    "sameAppSessionNewTaskSawUpdatedTerminalSchema": false,
+    "desktopRestartRequiredForUpdatedToolSchema": true,
+    "shortEntryCoversStaleProjection": true
+  },
+  "desktopLuna": {
+    "model": "gpt-5.6-luna",
+    "defaultEffort": "high",
+    "xhighReusePassed": true,
+    "firstTurnMilliseconds": 20069,
+    "reusedTurnMilliseconds": 15954,
+    "reuseLatencyReductionPercent": 20.504260301958244,
+    "acceptedResultsReportedModelLuna": true,
+    "oneUseTicketsConsumed": true,
+    "temporaryTasksArchived": true,
+    "unsupportedCausalGuessPromptHardened": true,
+    "codexCliProcessesUsed": 0
+  },
+  "universalTerminal": {
+    "structuredProgramArguments": true,
+    "explicitShellMode": true,
+    "windowsShimUsesBase64JsonArguments": true,
+    "backgroundPersistsAcrossDesktopTasks": true,
+    "completedArbitraryPayloadsErased": true,
+    "processTreeCancellation": true,
+    "maximumCommandSeconds": 43200,
+    "modelPolls": 0
+  },
+  "realProjects": [
+    {
+      "project": "Heliolune",
+      "testsPassed": 188,
+      "workingTreeUnchanged": true,
+      "matchedBenchmarkRuns": 3,
+      "plainMedianMilliseconds": 6553.9418000000005,
+      "heliotermMedianMilliseconds": 6588.199399999998,
+      "latencyDifferencePercent": 0.5227022308925244,
+      "plainOutputBytes": 16035,
+      "heliotermOutputBytes": 53,
+      "savedEstimatedTokens": 3995,
+      "outputReductionPercent": 99.66947302775179
+    },
+    {
+      "project": "TactileGear",
+      "testsPassed": 34
+    }
+  ],
+  "cleanup": {
+    "backgroundJobResidue": 0,
+    "lunaTicketResidue": 0,
+    "temporaryDesktopTasksArchived": true
+  },
+  "resolvedReleaseBlockers": [
+    "absolute source-runner commands consuming owner context",
+    "Windows npm-linked short entry silently skipping execution",
+    "PowerShell npm shim dropping the bare universal-mode delimiter",
+    "quoted deterministic arguments losing argv boundaries",
+    "short-entry cancellation tests leaving orphan marker files",
+    "Luna inferring an unsupported cause from ambiguous evidence",
+    "arbitrary terminal commands bypassing HelioTerm compression",
+    "long arbitrary commands requiring owner polling"
+  ],
+  "result": "pass",
+  "claim": "The installed package, short fallback, Desktop Luna lifecycle, universal transport, and tested real-project workloads passed; a full Codex Desktop restart remains required before an existing App session projects the new MCP schema."
+}

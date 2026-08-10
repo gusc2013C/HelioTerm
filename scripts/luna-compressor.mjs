@@ -54,7 +54,7 @@ export function desktopLunaPrompt({ canonical, evidence, material = true }) {
     'Do not use tools. Return only JSON matching {"note":"..."}.',
     `The note must be one complete phrase under ${NOTE_LIMIT_CHARACTERS} characters. Do not repeat status, counts, numbers, or the canonical line.`,
     material
-      ? 'Explain concrete failure/change kinds and affected areas.'
+      ? 'Explain concrete failure/change kinds and affected areas. State only causes directly supported by the evidence; if causality is ambiguous, describe the observed symptom without guessing.'
       : 'There is no material failure or working-tree change; return {"note":""}.',
     `CANONICAL=${canonical}`,
     `EVIDENCE=${String(evidence ?? '')}`,

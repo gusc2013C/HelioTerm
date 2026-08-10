@@ -3,11 +3,11 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELIOTERM_LIMITS, validateRequest } from './firewall.mjs';
-import { assertWorkingDirectory, commandFor, runCommand } from './kernel.mjs';
+import { assertWorkingDirectory, commandFor, EVIDENCE_OPERATIONS, runCommand, runEvidenceOperation } from './kernel.mjs';
 import { attachAdaptiveRoute } from './adaptive-channel.mjs';
 import { aggregateTokenSavings } from './token-savings.mjs';
 
-const PARALLEL_OBSERVATIONS = new Set(['git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'deps', 'version']);
+const PARALLEL_OBSERVATIONS = new Set(['git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'deps', 'version']);
 
 function option(argv, name) {
   const index = argv.indexOf(name);
@@ -31,8 +31,11 @@ function numberFrom(text, field) {
   return value === undefined ? null : Number(value);
 }
 
-function observationCount(text) {
-  for (const field of ['lines', 'matches', 'files', 'changes', 'records', 'rows', 'issues', 'entries', 'keys', 'packages']) {
+function observationCount(text, operation = null) {
+  const fields = ['count', 'hash'].includes(operation)
+    ? ['files']
+    : ['lines', 'matches', 'files', 'changes', 'records', 'rows', 'issues', 'entries', 'keys', 'packages'];
+  for (const field of fields) {
     const value = numberFrom(text, field);
     if (value !== null) return value;
   }
@@ -109,7 +112,7 @@ export async function runDirectBatch({ requests, cwd, adaptive = false, semantic
     const testFail = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'fail') ?? 0), 0);
     const raw = results.reduce((sum, entry) => sum + (numberFrom(entry.text, 'raw') ?? 0), 0);
     const observations = results.map((entry) => {
-      const count = observationCount(entry.text);
+      const count = observationCount(entry.text, entry.operation);
       const status = allOk ? '' : `:${entry.text.startsWith('OK|') ? 'ok' : 'fail'}`;
       return `${entry.operation}${status}${count === null ? '' : `/${count}`}`;
     }).join(',');
@@ -139,12 +142,35 @@ export async function runDirect({ request, cwd, adaptive = false, semantic = fal
   return runDirectBatch({ requests: [request], cwd, adaptive, semantic });
 }
 
+export async function runDirectEvidence({ request, cwd, maxBytes = 8192 }) {
+  const parsed = validateRequest(request);
+  if (!parsed.pass || !EVIDENCE_OPERATIONS.has(parsed.operation)) {
+    return { text: 'FAIL|calls=0|evidence-request-invalid|model=0', pass: false, commands: [] };
+  }
+  try {
+    const result = await runEvidenceOperation({ operation: parsed.operation, argument: parsed.argument, cwd, maxBytes });
+    return { ...result, commands: [result.command] };
+  } catch (error) {
+    return { text: `FAIL|calls=0|evidence-error=${String(error.message).replace(/\|/gu, '/').slice(0, 160)}|model=0`, pass: false, commands: [] };
+  }
+}
+
 export async function runCli(argv = process.argv.slice(2)) {
   const requests = options(argv, '--request');
   const cwd = resolve(option(argv, '--cwd') ?? process.cwd());
   if (!requests.length) {
-    process.stderr.write('Usage: direct-runner.mjs --request <T|operation|argument> [--request <line> ...] [--cwd <directory>] [--semantic] [--no-adaptive]\n');
+    process.stderr.write('Usage: direct-runner.mjs --request <T|operation|argument> [--request <line> ...] [--cwd <directory>] [--semantic] [--no-adaptive] [--evidence --evidence-bytes <256..32768>]\n');
     process.exitCode = 2;
+    return;
+  }
+  if (argv.includes('--evidence')) {
+    const byteValue = option(argv, '--evidence-bytes');
+    const maxBytes = byteValue === undefined || !/^\d+$/u.test(byteValue) ? (byteValue === undefined ? 8192 : 0) : Number(byteValue);
+    const result = requests.length === 1
+      ? await runDirectEvidence({ request: requests[0], cwd, maxBytes })
+      : { text: 'FAIL|calls=0|evidence-requires-one-request|model=0', pass: false };
+    process.stdout.write(`${result.text}\n`);
+    if (!result.pass) process.exitCode = 1;
     return;
   }
   const result = await runDirectBatch({ requests, cwd, adaptive: !argv.includes('--no-adaptive'), semantic: argv.includes('--semantic') });

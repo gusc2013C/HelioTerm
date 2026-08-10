@@ -5,8 +5,8 @@ import readline from 'node:readline';
 import { OPERATIONS, commandFor, evidenceOutput, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 import { acceptAdaptiveLunaResponse, attachAdaptiveRoute, contextForAdaptiveTicket } from './adaptive-channel.mjs';
 import { cancelBackgroundJob, startBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
-import { createTokenSavingsMeter, formatTokenSavings, replaceCompactTokenSavings } from './token-savings.mjs';
-import { runTerminalCommand, terminalSpecFromArguments, TERMINAL_SHELLS } from './terminal-transport.mjs';
+import { aggregateTokenSavings, createTokenSavingsMeter, formatTokenSavings, replaceCompactTokenSavings } from './token-savings.mjs';
+import { runTerminalCommand, terminalCommandFor, terminalSpecFromArguments, TERMINAL_SHELLS } from './terminal-transport.mjs';
 import { runDirectBatch } from './direct-runner.mjs';
 
 export { commandFor, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
@@ -162,6 +162,29 @@ export const TERMINAL_TOOL = {
   inputSchema: terminalInputSchema(),
   annotations: terminalAnnotations,
 };
+const terminalBatchCommandProperties = Object.fromEntries(Object.entries(terminalProperties).filter(([name]) => ![
+  'cwd', 'timeoutSeconds', 'adaptive', 'semantic', 'responseMode', 'maxBytes',
+].includes(name)));
+const terminalBatchCommandKeys = new Set(Object.keys(terminalBatchCommandProperties));
+export const TERMINAL_BATCH_TOOL = {
+  name: 'terminal_batch',
+  title: 'Run two to four planned commands',
+  description: 'Run two to four arbitrary non-interactive commands sequentially in one tool call. Validate the whole batch first and stop at the first failure. Use only when every command is known up front.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['cwd', 'commands'],
+    properties: {
+      cwd: executionProperties.cwd,
+      commands: {
+        type: 'array', minItems: 2, maxItems: 4,
+        items: { type: 'object', additionalProperties: false, properties: terminalBatchCommandProperties },
+      },
+      timeoutSeconds: { type: 'integer', minimum: 1, maximum: 43200, default: 240 },
+      adaptive: executionProperties.adaptive,
+      semantic: executionProperties.semantic,
+    },
+  },
+  annotations: terminalAnnotations,
+};
 export const TERMINAL_SUPERVISE_TOOL = {
   name: 'terminal_supervise',
   title: 'Supervise any long terminal command',
@@ -207,7 +230,7 @@ export const LUNA_ACCEPT_TOOL = {
   annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false },
 };
 export const TOOLS = Object.freeze([
-  OBSERVE_TOOL, BATCH_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_SUPERVISE_TOOL,
+  OBSERVE_TOOL, BATCH_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_BATCH_TOOL, TERMINAL_SUPERVISE_TOOL,
   JOB_START_TOOL, TERMINAL_START_TOOL, JOB_WAIT_TOOL, JOB_CANCEL_TOOL,
   SAVINGS_TOOL, LUNA_CONTEXT_TOOL, LUNA_ACCEPT_TOOL,
 ]);
@@ -286,8 +309,13 @@ async function handleExecution(message, mode) {
 async function handleBatchExecution(message) {
   const args = message.params.arguments ?? {};
   const requests = Array.isArray(args.requests) ? args.requests : [];
-  if (requests.length < 2 || requests.some((entry) => !OBSERVATION_OPERATIONS.includes(entry?.operation))) {
-    throw new Error('batch requires two to four read-only observations');
+  if (requests.length < 2 || requests.length > 4 || requests.some((entry) => !OBSERVATION_OPERATIONS.includes(entry?.operation))) {
+    const text = 'FAIL|calls=0|error=batch-requires-2..4-read-only-observations|model=0';
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+      isError: true,
+      structuredContent: { calls: 0, requested: requests.length, waitedMilliseconds: 0, modelPolls: 0 },
+    }) });
+    return;
   }
   const result = await runDirectBatch({
     requests: requests.map((entry) => `T|${entry.operation}|${entry.argument}`),
@@ -351,6 +379,68 @@ async function handleTerminalExecution(message, mode) {
   }) });
 }
 
+async function handleTerminalBatchExecution(message) {
+  const args = message.params.arguments ?? {};
+  const commands = Array.isArray(args.commands) ? args.commands : [];
+  const failure = (error) => {
+    const text = `FAIL|calls=0|error=${error}|terminal=1|model=0`;
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+      isError: true,
+      structuredContent: { terminal: true, calls: 0, requested: commands.length, failedAt: null, stoppedAt: 0, waitedMilliseconds: 0, modelPolls: 0 },
+    }) });
+  };
+  if (commands.length < 2 || commands.length > 4) { failure('terminal-batch-requires-2..4-commands'); return; }
+  let terminals;
+  try {
+    if (commands.some((command) => !command || typeof command !== 'object' || Array.isArray(command) || Object.keys(command).some((key) => !terminalBatchCommandKeys.has(key)))) {
+      throw new Error('invalid command shape');
+    }
+    terminals = commands.map((command) => terminalSpecFromArguments(command));
+    terminals.forEach(terminalCommandFor);
+  } catch { failure('terminal-batch-invalid-command'); return; }
+
+  const started = performance.now();
+  const deadline = Date.now() + (args.timeoutSeconds ?? 240) * 1000;
+  const results = [];
+  for (const terminal of terminals) {
+    const observed = await runTerminalCommand({
+      terminal,
+      cwd: args.cwd,
+      timeoutMilliseconds: Math.max(1, deadline - Date.now()),
+    });
+    results.push(observed);
+    if (!observed.text.startsWith('OK|')) break;
+  }
+  const elapsedMs = Math.max(0, Math.round(performance.now() - started));
+  const pass = results.length === terminals.length && results.every((result) => result.text.startsWith('OK|'));
+  const steps = results.map((result, index) => `${index + 1}:${result.text.startsWith('OK|') ? 'ok' : `fail/${result.exitCode ?? 1}`}`).join(',');
+  const failed = results.find((result) => !result.text.startsWith('OK|'));
+  const failedSample = failed ? `|sample=${clipUtf8(failed.text.replace(/\|/gu, ','), 96)}` : '';
+  const rawBytes = results.reduce((sum, result) => sum + (result.savings?.rawBytes ?? 0), 0);
+  const text = appendProof(`${pass ? 'OK' : 'FAIL'}|calls=${results.length}|requested=${terminals.length}|steps=${steps}${results.length < terminals.length ? `|stopped=${results.length + 1}` : ''}${failedSample}|raw=${rawBytes}`, ['terminal=1', `ms=${elapsedMs}`]);
+  const base = {
+    text,
+    pass,
+    rawBytes,
+    savings: aggregateTokenSavings(results.map((result) => result.savings), text),
+    adaptiveEvidence: results.map((result, index) => `[terminal-${index + 1}]\n${result.adaptiveEvidence ?? ''}`).join('\n'),
+  };
+  const routed = routeResult(base, { ...args, cwd: args.cwd });
+  savingsMeter.record(routed.savings);
+  send({ jsonrpc: '2.0', id: message.id, result: contentResult(routed.text, {
+    isError: !pass,
+    structuredContent: {
+      terminal: true,
+      calls: results.length,
+      requested: terminals.length,
+      failedAt: pass ? null : results.length,
+      stoppedAt: !pass && results.length < terminals.length ? results.length + 1 : null,
+      waitedMilliseconds: elapsedMs,
+      modelPolls: 0,
+    },
+  }) });
+}
+
 async function handle(message) {
   if (message.id == null) return;
   try {
@@ -359,6 +449,9 @@ async function handle(message) {
     else if (message.method === 'tools/list') send({ jsonrpc: '2.0', id: message.id, result: { tools: TOOLS } });
     else if (message.method === 'tools/call' && ['terminal', 'terminal_supervise', 'terminal_start'].includes(message.params?.name)) {
       await handleTerminalExecution(message, message.params.name);
+    }
+    else if (message.method === 'tools/call' && message.params?.name === 'terminal_batch') {
+      await handleTerminalBatchExecution(message);
     }
     else if (message.method === 'tools/call' && ['observe', 'run', 'supervise'].includes(message.params?.name)) {
       await handleExecution(message, message.params.name);

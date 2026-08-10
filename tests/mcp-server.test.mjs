@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -22,6 +22,7 @@ import {
   SAVINGS_TOOL,
   SUPERVISE_TOOL,
   TERMINAL_START_TOOL,
+  TERMINAL_BATCH_TOOL,
   TERMINAL_SUPERVISE_TOOL,
   TERMINAL_TOOL,
   TOOL,
@@ -103,7 +104,7 @@ test('MCP stdio implements initialize, tool listing, and compact tool call', () 
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.name, 'helioterm');
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.2.0');
   assert.deepEqual(responses.find((entry) => entry.id === 2).result.tools.map((tool) => tool.name), [
-    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
+    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
   ]);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /^OK\|calls=1/u);
   assert.match(responses.find((entry) => entry.id === 3).result.content[0].text, /\|model=0$/u);
@@ -188,12 +189,13 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(TOOLS[2], TOOL);
   assert.equal(TOOLS[3], SUPERVISE_TOOL);
   assert.equal(TOOLS[4], TERMINAL_TOOL);
-  assert.equal(TOOLS[5], TERMINAL_SUPERVISE_TOOL);
-  assert.equal(TOOLS[6], JOB_START_TOOL);
-  assert.equal(TOOLS[7], TERMINAL_START_TOOL);
-  assert.equal(TOOLS[8], JOB_WAIT_TOOL);
-  assert.equal(TOOLS[9], JOB_CANCEL_TOOL);
-  assert.equal(TOOLS[10], SAVINGS_TOOL);
+  assert.equal(TOOLS[5], TERMINAL_BATCH_TOOL);
+  assert.equal(TOOLS[6], TERMINAL_SUPERVISE_TOOL);
+  assert.equal(TOOLS[7], JOB_START_TOOL);
+  assert.equal(TOOLS[8], TERMINAL_START_TOOL);
+  assert.equal(TOOLS[9], JOB_WAIT_TOOL);
+  assert.equal(TOOLS[10], JOB_CANCEL_TOOL);
+  assert.equal(TOOLS[11], SAVINGS_TOOL);
   assert.deepEqual(SAVINGS_TOOL.inputSchema, { type: 'object', additionalProperties: false, properties: {} });
   assert.equal(SAVINGS_TOOL.annotations.readOnlyHint, true);
   assert.equal(SAVINGS_TOOL.annotations.destructiveHint, false);
@@ -204,8 +206,8 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(JOB_START_TOOL.annotations.idempotentHint, false);
   assert.equal(JOB_WAIT_TOOL.annotations.readOnlyHint, true);
   const config = JSON.parse(readFileSync('.mcp.json', 'utf8'));
-  assert.equal(TOOLS[11], LUNA_CONTEXT_TOOL);
-  assert.equal(TOOLS[12], LUNA_ACCEPT_TOOL);
+  assert.equal(TOOLS[12], LUNA_CONTEXT_TOOL);
+  assert.equal(TOOLS[13], LUNA_ACCEPT_TOOL);
   assert.equal(LUNA_CONTEXT_TOOL.annotations.readOnlyHint, true);
   assert.match(LUNA_CONTEXT_TOOL.description, /already-created temporary Desktop Luna leaf/u);
   assert.match(LUNA_CONTEXT_TOOL.description, /never create or wait for another task/u);
@@ -215,7 +217,7 @@ test('MCP savings tool is read-only, deterministic, and enabled', () => {
   assert.equal(config.mcpServers.helioterm.default_tools_approval_mode, 'writes');
   assert.equal(config.mcpServers.helioterm.tool_timeout_sec, 43260);
   assert.deepEqual(config.mcpServers.helioterm.enabled_tools, [
-    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
+    'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'luna_context', 'luna_accept',
   ]);
 });
 
@@ -241,6 +243,124 @@ test('MCP batch executes four read-only observations in one tool call', () => {
   assert.equal(result.structuredContent.requested, 4);
   assert.equal(result.structuredContent.modelPolls, 0);
   assert.ok(Buffer.byteLength(result.content[0].text, 'utf8') <= 256);
+});
+
+test('MCP batch validates every operation atomically and rejects oversized or executable work', () => {
+  const requests = [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'batch', arguments: {
+      cwd: process.cwd(), requests: [
+        { operation: 'git', argument: 'status --short' },
+        { operation: 'test', argument: 'tests/firewall.test.mjs' },
+      ],
+    } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'batch', arguments: {
+      cwd: process.cwd(), requests: Array.from({ length: 5 }, () => ({ operation: 'git', argument: 'status --short' })),
+    } } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'batch', arguments: {
+      cwd: process.cwd(), adaptive: false, requests: [
+        { operation: 'git', argument: 'status --short' },
+        { operation: 'files', argument: process.cwd() },
+      ],
+    } } },
+  ];
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${requests.map(JSON.stringify).join('\n')}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const responses = run.stdout.trim().split(/\r?\n/u).map(JSON.parse);
+  for (const id of [1, 2]) {
+    const result = responses.find((entry) => entry.id === id).result;
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /^FAIL\|calls=0\|error=batch-requires/u);
+    assert.match(result.content[0].text, /\|model=0$/u);
+    assert.equal(result.structuredContent.calls, 0);
+  }
+  const atomic = responses.find((entry) => entry.id === 3).result;
+  assert.equal(atomic.isError, true);
+  assert.equal(atomic.content[0].text, 'FAIL|calls=0|request-invalid|model=0');
+  assert.equal(atomic.structuredContent.calls, 0);
+});
+
+test('MCP terminal_batch runs planned commands sequentially in one bounded result', () => {
+  assert.equal(TERMINAL_BATCH_TOOL.annotations.readOnlyHint, false);
+  assert.equal(TERMINAL_BATCH_TOOL.annotations.destructiveHint, true);
+  assert.equal(TERMINAL_BATCH_TOOL.annotations.openWorldHint, true);
+  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal_batch', arguments: {
+    cwd: process.cwd(), adaptive: false, commands: [
+      { program: process.execPath, args: ['-e', "console.log('batch-one')"] },
+      { program: process.execPath, args: ['-e', "console.log('batch-two')"] },
+    ],
+  } } };
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000 });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const result = JSON.parse(run.stdout.trim()).result;
+  assert.equal(result.isError, false);
+  assert.match(result.content[0].text, /^OK\|calls=2\|requested=2\|steps=1:ok,2:ok/u);
+  assert.match(result.content[0].text, /\|terminal=1\|ms=\d+\|model=0$/u);
+  assert.equal(result.structuredContent.calls, 2);
+  assert.equal(result.structuredContent.modelPolls, 0);
+  assert.ok(Buffer.byteLength(result.content[0].text, 'utf8') <= 256);
+});
+
+test('MCP terminal_batch validates atomically and stops before commands after a failure', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-terminal-batch-'));
+  const marker = join(root, 'must-not-exist');
+  const writeMarker = `require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad')`;
+  try {
+    const invalid = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal_batch', arguments: {
+      cwd: root, adaptive: false, commands: [
+        { program: process.execPath, args: ['-e', writeMarker] },
+        { program: process.execPath, shell: 'powershell', script: 'echo invalid' },
+      ],
+    } } };
+    const stopped = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'terminal_batch', arguments: {
+      cwd: root, adaptive: false, commands: [
+        { program: process.execPath, args: ['-e', 'process.exit(7)'] },
+        { program: process.execPath, args: ['-e', writeMarker] },
+      ],
+    } } };
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(invalid)}\n${JSON.stringify(stopped)}\n`, encoding: 'utf8', timeout: 10000 });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const responses = run.stdout.trim().split(/\r?\n/u).map(JSON.parse);
+    const rejected = responses.find((entry) => entry.id === 1).result;
+    assert.equal(rejected.content[0].text, 'FAIL|calls=0|error=terminal-batch-invalid-command|terminal=1|model=0');
+    assert.equal(rejected.structuredContent.calls, 0);
+    assert.equal(existsSync(marker), false);
+    const failed = responses.find((entry) => entry.id === 2).result;
+    assert.equal(failed.isError, true);
+    assert.match(failed.content[0].text, /^FAIL\|calls=1\|requested=2\|steps=1:fail\/7\|stopped=2/u);
+    assert.equal(failed.structuredContent.calls, 1);
+    assert.equal(failed.structuredContent.failedAt, 1);
+    assert.equal(failed.structuredContent.stoppedAt, 2);
+    assert.equal(existsSync(marker), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MCP terminal_batch enforces one whole-batch timeout budget and skips remaining commands', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-terminal-batch-timeout-'));
+  const marker = join(root, 'must-not-exist');
+  const writeMarker = `require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad')`;
+  try {
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal_batch', arguments: {
+      cwd: root, adaptive: false, timeoutSeconds: 1, commands: [
+        { program: process.execPath, args: ['-e', 'setTimeout(()=>{},2500)'] },
+        { program: process.execPath, args: ['-e', writeMarker] },
+      ],
+    } } };
+    const started = Date.now();
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 5000 });
+    const elapsed = Date.now() - started;
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const result = JSON.parse(run.stdout.trim()).result;
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /^FAIL\|calls=1\|requested=2\|steps=1:fail\/124\|stopped=2/u);
+    assert.equal(result.structuredContent.failedAt, 1);
+    assert.equal(result.structuredContent.stoppedAt, 2);
+    assert.equal(existsSync(marker), false);
+    assert.ok(elapsed >= 800 && elapsed < 3000, `unexpected terminal batch timeout duration: ${elapsed}ms`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('MCP supervise waits internally once while ping remains responsive', () => {

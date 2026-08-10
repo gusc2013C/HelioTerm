@@ -4,27 +4,6 @@ import { spawn } from 'node:child_process';
 import { basename, resolve } from 'node:path';
 import readline from 'node:readline';
 
-const PROFILES = Object.freeze({
-  node: Object.freeze([
-    { operation: 'git', argument: 'status --short' },
-    { operation: 'files', argument: 'tests' },
-    { operation: 'json', argument: 'package.json' },
-    { operation: 'count', argument: 'scripts/mcp-server.mjs tests/mcp-server.test.mjs' },
-  ]),
-  python: Object.freeze([
-    { operation: 'git', argument: 'status --short' },
-    { operation: 'files', argument: 'tests' },
-    { operation: 'list', argument: 'src' },
-    { operation: 'count', argument: 'main.py README.md requirements.txt' },
-  ]),
-  generic: Object.freeze([
-    { operation: 'git', argument: 'status --short' },
-    { operation: 'files', argument: 'tests' },
-    { operation: 'list', argument: 'plugins' },
-    { operation: 'count', argument: 'README.md CHANGELOG.md' },
-  ]),
-});
-
 function median(values) {
   const ordered = [...values].sort((left, right) => left - right);
   return ordered[Math.floor(ordered.length / 2)];
@@ -49,7 +28,7 @@ function createClient() {
     call(name, args) {
       const id = nextId++;
       const request = { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } };
-      const promise = new Promise((resolvePromise, reject) => pending.set(id, { resolve: resolvePromise, reject }));
+      const promise = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
       child.stdin.write(`${JSON.stringify(request)}\n`);
       return { requestBytes: Buffer.byteLength(JSON.stringify(request), 'utf8'), promise };
     },
@@ -58,17 +37,15 @@ function createClient() {
 }
 
 const rounds = Math.max(3, Number(process.argv[2] ?? 15));
-const cwd = resolve(process.argv[3] ?? process.cwd());
-const profile = process.argv[4] ?? 'node';
-const requests = PROFILES[profile];
-if (!requests) throw new Error(`profile must be one of: ${Object.keys(PROFILES).join(', ')}`);
+const targetCwd = resolve(process.argv[3] ?? process.cwd());
 const client = createClient();
+const commands = [1, 2, 3, 4].map((value) => ({ program: process.execPath, args: ['-e', `process.stdout.write('${value}')`] }));
 const baselineMs = [];
 const batchMs = [];
 let baselineRequestBytes = 0;
+let baselineResponseBytes = 0;
 let batchRequestBytes = 0;
-let baselineBytes = 0;
-let batchBytes = 0;
+let batchResponseBytes = 0;
 let pass = true;
 
 try {
@@ -76,24 +53,25 @@ try {
     const baselineStarted = performance.now();
     let requestBytes = 0;
     let responseBytes = 0;
-    for (const request of requests) {
-      const pending = client.call('observe', { ...request, cwd, adaptive: false });
+    for (const command of commands) {
+      const pending = client.call('terminal', { cwd: targetCwd, adaptive: false, ...command });
       requestBytes += pending.requestBytes;
       const response = await pending.promise;
-      responseBytes += Buffer.byteLength(response.result.content[0].text, 'utf8');
-      pass &&= response.result.isError === false;
+      const result = response.result;
+      responseBytes += Buffer.byteLength(result.content[0].text, 'utf8');
+      pass &&= result.isError === false;
     }
     baselineMs.push(performance.now() - baselineStarted);
     baselineRequestBytes = requestBytes;
-    baselineBytes = responseBytes;
+    baselineResponseBytes = responseBytes;
 
     const batchStarted = performance.now();
-    const pending = client.call('batch', { cwd, adaptive: false, requests });
+    const pending = client.call('terminal_batch', { cwd: targetCwd, adaptive: false, commands });
     batchRequestBytes = pending.requestBytes;
     const response = await pending.promise;
     batchMs.push(performance.now() - batchStarted);
-    batchBytes = Buffer.byteLength(response.result.content[0].text, 'utf8');
-    pass &&= response.result.isError === false && response.result.structuredContent.calls === requests.length;
+    batchResponseBytes = Buffer.byteLength(response.result.content[0].text, 'utf8');
+    pass &&= response.result.isError === false && response.result.structuredContent.calls === 4;
   }
 } finally {
   client.close();
@@ -104,17 +82,17 @@ const batchMedian = median(batchMs);
 process.stdout.write(`${JSON.stringify({
   pass,
   rounds,
-  project: basename(cwd),
-  profile,
-  observations: requests.length,
-  baseline: { model_tool_round_trips: 4, median_ms: Number(baselineMedian.toFixed(3)), request_bytes: baselineRequestBytes, compact_bytes: baselineBytes },
-  batch: { model_tool_round_trips: 1, median_ms: Number(batchMedian.toFixed(3)), request_bytes: batchRequestBytes, compact_bytes: batchBytes },
+  project: basename(targetCwd),
+  commands: commands.length,
+  baseline: { model_tool_round_trips: 4, median_ms: Number(baselineMedian.toFixed(3)), request_bytes: baselineRequestBytes, compact_bytes: baselineResponseBytes },
+  batch: { model_tool_round_trips: 1, median_ms: Number(batchMedian.toFixed(3)), request_bytes: batchRequestBytes, compact_bytes: batchResponseBytes },
   reduction: {
     model_tool_round_trips_percent: 75,
     request_bytes_percent: Number((((baselineRequestBytes - batchRequestBytes) / baselineRequestBytes) * 100).toFixed(2)),
-    compact_bytes_percent: Number((((baselineBytes - batchBytes) / baselineBytes) * 100).toFixed(2)),
+    compact_bytes_percent: Number((((baselineResponseBytes - batchResponseBytes) / baselineResponseBytes) * 100).toFixed(2)),
     local_latency_percent: Number((((baselineMedian - batchMedian) / baselineMedian) * 100).toFixed(2)),
   },
-  scope: 'local deterministic transport; provider billing not inferred',
+  semantics: 'sequential, atomically validated, stop on first failure, model=0',
+  scope: 'local MCP transport; provider billing not inferred',
 })}\n`);
 if (!pass) process.exitCode = 1;

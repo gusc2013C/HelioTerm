@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 - Unreleased
+## 0.4.0 - 2026-08-17
 
 - Add Headroom-inspired deterministic importance routing for terminal, JSON/JSONL, and log evidence, preserving failures, numeric outliers, change points, and boundaries while protecting code and diffs from semantic rewriting.
 - Add opt-in MCP `responseMode=compressed` and one `compression_retrieve` interface with TTL-bound opaque handles; keep existing compact and exact evidence APIs unchanged.

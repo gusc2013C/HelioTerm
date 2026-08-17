@@ -67,12 +67,18 @@ export function createTokenSavingsMeter() {
     rawEstimatedTokens: 0,
     compactEstimatedTokens: 0,
     savedEstimatedTokens: 0,
+    ownerWakeupsAvoided: 0,
+    samplingBoundariesAvoided: 0,
   };
   return Object.freeze({
-    record(entry) {
+    record(entry, { ownerWakeupsAvoided = 0, samplingBoundariesAvoided = ownerWakeupsAvoided } = {}) {
       if (!entry || entry.estimator !== ESTIMATOR || entry.scope !== 'tool-content-only') throw new Error('invalid token savings measurement');
+      if (!Number.isSafeInteger(ownerWakeupsAvoided) || ownerWakeupsAvoided < 0) throw new Error('ownerWakeupsAvoided must be a non-negative safe integer');
+      if (!Number.isSafeInteger(samplingBoundariesAvoided) || samplingBoundariesAvoided < 0) throw new Error('samplingBoundariesAvoided must be a non-negative safe integer');
       totals.runs += 1;
-      for (const field of Object.keys(totals).filter((field) => field !== 'runs')) totals[field] += entry[field];
+      for (const field of ['rawBytes', 'compactBytes', 'savedBytes', 'rawEstimatedTokens', 'compactEstimatedTokens', 'savedEstimatedTokens']) totals[field] += entry[field];
+      totals.ownerWakeupsAvoided += ownerWakeupsAvoided;
+      totals.samplingBoundariesAvoided += samplingBoundariesAvoided;
       return this.snapshot();
     },
     snapshot() {
@@ -83,12 +89,12 @@ export function createTokenSavingsMeter() {
 
 export function formatTokenSavings(snapshot) {
   const percent = snapshot.rawBytes > 0 ? ((snapshot.savedBytes / snapshot.rawBytes) * 100).toFixed(1) : '0.0';
-  const base = `OK|calls=0|meter=content|runs=${snapshot.runs}|rawB=${snapshot.rawBytes}|outB=${snapshot.compactBytes}|savedB=${snapshot.savedBytes}|rawEst=${snapshot.rawEstimatedTokens}|outEst=${snapshot.compactEstimatedTokens}|savedEst=${snapshot.savedEstimatedTokens}|pctB=${percent}`;
+  const base = `OK|calls=0|meter=content|runs=${snapshot.runs}|rawB=${snapshot.rawBytes}|outB=${snapshot.compactBytes}|savedB=${snapshot.savedBytes}|rawEst=${snapshot.rawEstimatedTokens}|outEst=${snapshot.compactEstimatedTokens}|savedEst=${snapshot.savedEstimatedTokens}|wakeupsAvoided=${snapshot.ownerWakeupsAvoided}|boundariesAvoided=${snapshot.samplingBoundariesAvoided}|pctB=${percent}`;
   let reportEstimatedTokens = 0;
   let report = '';
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const netEstimatedTokens = snapshot.savedEstimatedTokens - reportEstimatedTokens;
-    report = `${base}|reportEst=${reportEstimatedTokens}|netEst=${netEstimatedTokens}|method=bytes4|scope=content|model=0`;
+    report = `${base}|reportEst=${reportEstimatedTokens}|netEst=${netEstimatedTokens}|method=bytes4-content-estimate-not-billing|scope=content|model=0`;
     const next = estimateTokens(report);
     if (next === reportEstimatedTokens) break;
     reportEstimatedTokens = next;

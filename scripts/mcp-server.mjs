@@ -4,13 +4,18 @@ import { pathToFileURL } from 'node:url';
 import readline from 'node:readline';
 import { OPERATIONS, commandFor, evidenceOutput, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 import { acceptAdaptiveLunaResponse, attachAdaptiveRoute, contextForAdaptiveTicket } from './adaptive-channel.mjs';
-import { cancelBackgroundJob, startBackgroundJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
-import { createTokenSavingsMeter, formatTokenSavings, replaceCompactTokenSavings } from './token-savings.mjs';
+import { cancelBackgroundJob, confirmBackgroundJobStart, startBackgroundJob, startBackgroundTerminalBatchJob, startBackgroundTerminalJob, waitBackgroundJob } from './job-manager.mjs';
+import { createTokenSavingsMeter, formatTokenSavings, measureTokenSavingsFromBytes, replaceCompactTokenSavings } from './token-savings.mjs';
 import { runTerminalCommand, terminalSpecFromArguments, TERMINAL_SHELLS } from './terminal-transport.mjs';
+import { runTerminalBatch, validateTerminalBatchCommands } from './terminal-batch.mjs';
+import { runDirectBatch } from './direct-runner.mjs';
+import { aggregateRolloutMetrics, analyzeRollout } from './rollout-metrics.mjs';
+import { loadSettings } from './settings.mjs';
+import { CONTENT_HANDLE_PATTERN, ContentCompressionService } from './content-compression.mjs';
 
 export { commandFor, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 
-const VERSION = '0.2.0';
+const VERSION = '0.4.0';
 export const OBSERVATION_OPERATIONS = Object.freeze([
   'git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'deps', 'version',
 ]);
@@ -23,7 +28,7 @@ const executionProperties = {
 };
 const executionAnnotations = { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false };
 const evidenceProperties = {
-  responseMode: { type: 'string', enum: ['compact', 'evidence'], default: 'compact' },
+  responseMode: { type: 'string', enum: ['compact', 'evidence', 'compressed'], default: 'compact' },
   maxBytes: { type: 'integer', minimum: 256, maximum: 32768, default: 8192 },
 };
 const terminalProperties = {
@@ -62,6 +67,30 @@ export const OBSERVE_TOOL = {
       ...executionProperties,
       operation: { type: 'string', enum: OBSERVATION_OPERATIONS },
       ...evidenceProperties,
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+};
+export const BATCH_TOOL = {
+  name: 'batch',
+  title: 'Observe up to four project facts',
+  description: 'Run two to four independent read-only observations in one MCP call. Use this when the operations are known up front to avoid repeated model/tool round trips.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['cwd', 'requests'],
+    properties: {
+      cwd: executionProperties.cwd,
+      requests: {
+        type: 'array', minItems: 2, maxItems: 4,
+        items: {
+          type: 'object', additionalProperties: false, required: ['operation', 'argument'],
+          properties: {
+            operation: { type: 'string', enum: OBSERVATION_OPERATIONS },
+            argument: executionProperties.argument,
+          },
+        },
+      },
+      adaptive: executionProperties.adaptive,
+      semantic: executionProperties.semantic,
     },
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
@@ -137,6 +166,43 @@ export const TERMINAL_TOOL = {
   inputSchema: terminalInputSchema(),
   annotations: terminalAnnotations,
 };
+const terminalBatchCommandProperties = Object.fromEntries(Object.entries(terminalProperties).filter(([name]) => ![
+  'cwd', 'timeoutSeconds', 'adaptive', 'semantic', 'responseMode', 'maxBytes',
+].includes(name)));
+const terminalBatchCommandKeys = new Set(Object.keys(terminalBatchCommandProperties));
+export const TERMINAL_BATCH_TOOL = {
+  name: 'terminal_batch',
+  title: 'Run two to four planned commands',
+  description: 'Run two to four arbitrary non-interactive commands sequentially in one tool call. Validate the whole batch first and stop at the first failure. Use only when every command is known up front.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['cwd', 'commands'],
+    properties: {
+      cwd: executionProperties.cwd,
+      commands: {
+        type: 'array', minItems: 2, maxItems: 4,
+        items: { type: 'object', additionalProperties: false, properties: terminalBatchCommandProperties },
+      },
+      timeoutSeconds: { type: 'integer', minimum: 1, maximum: 43200, default: 240 },
+      adaptive: executionProperties.adaptive,
+      semantic: executionProperties.semantic,
+    },
+  },
+  annotations: terminalAnnotations,
+};
+export const TERMINAL_BATCH_START_TOOL = {
+  name: 'terminal_batch_start',
+  title: 'Start two to four planned commands in one background job',
+  description: 'Atomically validate two to four preplanned arbitrary commands, then run them sequentially in one persistent background job. Stops on the first failure; collect once with job_wait.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['cwd', 'commands', 'timeoutSeconds'],
+    properties: {
+      cwd: executionProperties.cwd,
+      commands: TERMINAL_BATCH_TOOL.inputSchema.properties.commands,
+      timeoutSeconds: { type: 'integer', minimum: 1, maximum: 43200 },
+    },
+  },
+  annotations: terminalAnnotations,
+};
 export const TERMINAL_SUPERVISE_TOOL = {
   name: 'terminal_supervise',
   title: 'Supervise any long terminal command',
@@ -156,6 +222,33 @@ export const SAVINGS_TOOL = {
   title: 'Report HelioTerm token savings',
   description: 'Return deterministic cumulative raw/compact byte counts and estimated content-token savings for this MCP process. Uses no model.',
   inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+};
+export const COMPRESSION_RETRIEVE_TOOL = {
+  name: 'compression_retrieve',
+  title: 'Retrieve compressed evidence',
+  description: 'Retrieve or query the retained evidence behind one opaque HelioTerm compression handle. Native and Headroom MCP backends share this interface.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['handle'],
+    properties: {
+      handle: { type: 'string', pattern: CONTENT_HANDLE_PATTERN },
+      query: { type: 'string', minLength: 1, maxLength: 512 },
+      maxBytes: { type: 'integer', minimum: 256, maximum: 32768, default: 8192 },
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true, idempotentHint: true },
+};
+export const ROLLOUT_AUDIT_TOOL = {
+  name: 'rollout_audit',
+  title: 'Audit rollout sampling pressure',
+  description: 'Deterministically audit one to eight rollout files without AI or prompt/output retention. Applies configured migration thresholds and returns a Desktop owner migration decision; the MCP server itself cannot create or archive tasks.',
+  inputSchema: {
+    type: 'object', additionalProperties: false, required: ['rollouts'],
+    properties: {
+      rollouts: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', minLength: 3, maxLength: 1024 } },
+      sinceMs: { type: 'integer', minimum: 0, default: 0 },
+    },
+  },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
 };
 export const LUNA_CONTEXT_TOOL = {
@@ -182,11 +275,13 @@ export const LUNA_ACCEPT_TOOL = {
   annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false },
 };
 export const TOOLS = Object.freeze([
-  OBSERVE_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_SUPERVISE_TOOL,
+  OBSERVE_TOOL, BATCH_TOOL, TOOL, SUPERVISE_TOOL, TERMINAL_TOOL, TERMINAL_BATCH_TOOL, TERMINAL_BATCH_START_TOOL, TERMINAL_SUPERVISE_TOOL,
   JOB_START_TOOL, TERMINAL_START_TOOL, JOB_WAIT_TOOL, JOB_CANCEL_TOOL,
-  SAVINGS_TOOL, LUNA_CONTEXT_TOOL, LUNA_ACCEPT_TOOL,
+  SAVINGS_TOOL, COMPRESSION_RETRIEVE_TOOL, ROLLOUT_AUDIT_TOOL, LUNA_CONTEXT_TOOL, LUNA_ACCEPT_TOOL,
 ]);
 const savingsMeter = createTokenSavingsMeter();
+let compressionService = null;
+let compressionSignature = null;
 
 function clipUtf8(value, maxBytes) {
   let result = '';
@@ -227,9 +322,107 @@ function contentResult(text, { isError = false, structuredContent } = {}) {
   };
 }
 
+function configuredCompressionService() {
+  const settings = loadSettings().compression;
+  const signature = JSON.stringify(settings);
+  if (!compressionService || compressionSignature !== signature) {
+    compressionService?.close();
+    compressionService = new ContentCompressionService({ settings });
+    compressionSignature = signature;
+  }
+  return compressionService;
+}
+
+async function compressedEvidence(content, { maxBytes = 8192, operation = 'terminal', commandRawBytes = null, allowHeadroom = false, cwd = null } = {}) {
+  const compressed = await configuredCompressionService().compress(content, { maxBytes, allowHeadroom });
+  const savedBytes = compressed.rawBytes - compressed.compressedBytes;
+  const facts = [
+    `compressed=${compressed.compressed ? 1 : 0}`,
+    `backend=${compressed.backend}`,
+    `format=${compressed.format}`,
+    `raw=${compressed.rawBytes}`,
+    `shown=${compressed.compressedBytes}`,
+    `savedB=${savedBytes}`,
+    `retrievable=${compressed.retrievable ? 1 : 0}`,
+    ...(compressed.handle ? [`handle=${compressed.handle}`] : []),
+    ...(compressed.fallback ? ['fallback=1'] : []),
+    ...(commandRawBytes !== null ? [`commandRaw=${commandRawBytes}`] : []),
+    'inspired=headroom',
+    'model=0',
+  ];
+  const complete = compressed.compressed || compressed.compressedBytes >= compressed.rawBytes;
+  const canonical = `${complete ? 'OK' : 'MORE'}|calls=1|operation=${operation}|${facts.join('|')}`;
+  let adaptive = null;
+  if (compressed.format === 'text' && compressed.compressed) {
+    adaptive = attachAdaptiveRoute({
+      result: {
+        text: `OK|calls=1|more=1|operation=${operation}|${facts.join('|')}`,
+        operation,
+        adaptiveEvidence: content,
+        savings: { rawBytes: compressed.rawBytes },
+      },
+      semantic: true,
+      cwd,
+    });
+  }
+  const lunaRouted = adaptive?.adaptive?.routed === true;
+  const text = lunaRouted
+    ? `${adaptive.text}|model=0`
+    : `${canonical}${compressed.content ? `\n${compressed.content}` : ''}`;
+  return {
+    text,
+    compressed,
+    adaptive: adaptive?.adaptive ?? null,
+    savings: measureTokenSavingsFromBytes({ rawBytes: compressed.rawBytes, compactText: text }),
+  };
+}
+
+function compressedStructuredContent(envelope, extra = {}) {
+  const value = envelope.compressed;
+  return {
+    ...extra,
+    compression: {
+      backend: value.backend,
+      format: value.format,
+      compressed: value.compressed,
+      rawBytes: value.rawBytes,
+      compressedBytes: value.compressedBytes,
+      savedBytes: value.rawBytes - value.compressedBytes,
+      retrievable: value.retrievable,
+      handle: value.handle,
+      transforms: value.transforms,
+      fallback: value.fallback === true,
+      attribution: 'Headroom Contributors; documented ContentRouter/CCR/live-zone concepts; Apache-2.0',
+    },
+    semanticCompression: envelope.adaptive?.routed ? {
+      backend: 'luna',
+      routed: true,
+      ticket: envelope.adaptive.ticket.handle,
+      effort: envelope.adaptive.ticket.effort,
+      reason: envelope.adaptive.decision.reason,
+    } : { routed: false },
+    modelPolls: 0,
+  };
+}
+
 async function handleExecution(message, mode) {
   const args = message.params.arguments ?? {};
   if (mode === 'observe' && !OBSERVATION_OPERATIONS.includes(args.operation)) throw new Error('observe requires a read-only operation');
+  if (['observe', 'run'].includes(mode) && args.responseMode === 'compressed') {
+    const observed = await runOperation(args);
+    const envelope = await compressedEvidence(observed.adaptiveEvidence ?? '', {
+      maxBytes: args.maxBytes ?? 8192,
+      operation: observed.operation,
+      commandRawBytes: observed.savings?.rawBytes ?? null,
+      cwd: args.cwd,
+    });
+    savingsMeter.record(envelope.savings);
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(envelope.text, {
+      isError: observed.text.startsWith('FAIL|'),
+      structuredContent: compressedStructuredContent(envelope, { operation: observed.operation, commandRawBytes: observed.savings?.rawBytes ?? null }),
+    }) });
+    return;
+  }
   if (['observe', 'run'].includes(mode) && args.responseMode === 'evidence') {
     const observed = await runEvidenceOperation({ ...args, maxBytes: args.maxBytes ?? 8192 });
     savingsMeter.record(observed.savings);
@@ -258,14 +451,47 @@ async function handleExecution(message, mode) {
   }) });
 }
 
+async function handleBatchExecution(message) {
+  const args = message.params.arguments ?? {};
+  const requests = Array.isArray(args.requests) ? args.requests : [];
+  if (requests.length < 2 || requests.length > 4 || requests.some((entry) => !OBSERVATION_OPERATIONS.includes(entry?.operation))) {
+    const text = 'FAIL|calls=0|error=batch-requires-2..4-read-only-observations|model=0';
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+      isError: true,
+      structuredContent: { calls: 0, requested: requests.length, waitedMilliseconds: 0, modelPolls: 0 },
+    }) });
+    return;
+  }
+  const result = await runDirectBatch({
+    requests: requests.map((entry) => `T|${entry.operation}|${entry.argument}`),
+    cwd: args.cwd,
+    adaptive: args.adaptive !== false,
+    semantic: args.semantic === true,
+  });
+  if (result.savings) savingsMeter.record(result.savings);
+  send({ jsonrpc: '2.0', id: message.id, result: contentResult(result.text, {
+    isError: !result.pass,
+    structuredContent: {
+      calls: result.commands?.length ?? 0,
+      requested: requests.length,
+      waitedMilliseconds: result.elapsedMs ?? 0,
+      modelPolls: 0,
+    },
+  }) });
+}
+
 async function handleTerminalExecution(message, mode) {
   const args = message.params.arguments ?? {};
   const terminal = terminalSpecFromArguments(args);
   if (mode === 'terminal_start') {
     const started = startBackgroundTerminalJob({ terminal, cwd: args.cwd, timeoutMilliseconds: args.timeoutSeconds * 1000 });
-    const text = `MORE|calls=0|status=queued|job=${started.handle}|background=1|terminal=1|polls=0|model=0`;
+    const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+    const status = confirmed.state.status;
+    const failed = status === 'failed';
+    const text = `${failed ? 'FAIL' : 'MORE'}|calls=0|status=${status}|job=${started.handle}|background=1|terminal=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0`;
     send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
-      structuredContent: { job: started.handle, status: started.status, timeoutMilliseconds: started.timeoutMilliseconds, modelPolls: 0 },
+      isError: failed,
+      structuredContent: { job: started.handle, status, timeoutMilliseconds: started.timeoutMilliseconds, startupConfirmed: confirmed.confirmed, modelPolls: 0 },
     }) });
     return;
   }
@@ -277,6 +503,26 @@ async function handleTerminalExecution(message, mode) {
     responseMode: args.responseMode ?? 'compact',
     maxBytes: args.maxBytes ?? 8192,
   });
+  if (args.responseMode === 'compressed') {
+    const envelope = await compressedEvidence(observed.evidenceBody ?? observed.adaptiveEvidence ?? '', {
+      maxBytes: args.maxBytes ?? 8192,
+      operation: 'terminal',
+      commandRawBytes: observed.rawBytes ?? observed.savings?.rawBytes ?? null,
+      allowHeadroom: true,
+      cwd: args.cwd,
+    });
+    savingsMeter.record(envelope.savings);
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(envelope.text, {
+      isError: !observed.pass,
+      structuredContent: compressedStructuredContent(envelope, {
+        terminal: true,
+        commandRawBytes: observed.rawBytes ?? observed.savings?.rawBytes ?? null,
+        waitedMilliseconds: observed.durationMilliseconds,
+        windowsShimRetry: observed.windowsShimRetry === true,
+      }),
+    }) });
+    return;
+  }
   if (args.responseMode === 'evidence') {
     savingsMeter.record(observed.savings);
     send({ jsonrpc: '2.0', id: message.id, result: contentResult(observed.text, {
@@ -302,6 +548,45 @@ async function handleTerminalExecution(message, mode) {
   }) });
 }
 
+async function handleTerminalBatchExecution(message) {
+  const args = message.params.arguments ?? {};
+  const commands = Array.isArray(args.commands) ? args.commands : [];
+  const failure = (error) => {
+    const text = `FAIL|calls=0|error=${error}|terminal=1|model=0`;
+    send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+      isError: true,
+      structuredContent: { terminal: true, calls: 0, requested: commands.length, failedAt: null, stoppedAt: 0, waitedMilliseconds: 0, modelPolls: 0 },
+    }) });
+  };
+  if (commands.length < 2 || commands.length > 4) { failure('terminal-batch-requires-2..4-commands'); return; }
+  let terminals;
+  try {
+    terminals = validateTerminalBatchCommands(commands, terminalBatchCommandKeys);
+  } catch { failure('terminal-batch-invalid-command'); return; }
+  const batch = await runTerminalBatch({ terminals, cwd: args.cwd, timeoutMilliseconds: (args.timeoutSeconds ?? 240) * 1000 });
+  const routed = routeResult(batch, { ...args, cwd: args.cwd }, [`wakeupsAvoided=${Math.max(0, terminals.length - 1)}`, `boundariesAvoided=${Math.max(0, terminals.length - 1)}`]);
+  savingsMeter.record(routed.savings, { ownerWakeupsAvoided: Math.max(0, terminals.length - 1), samplingBoundariesAvoided: Math.max(0, terminals.length - 1) });
+  send({ jsonrpc: '2.0', id: message.id, result: contentResult(routed.text, {
+    isError: !batch.pass,
+    structuredContent: {
+      terminal: true,
+      batch: true,
+      calls: batch.results.length,
+      requested: terminals.length,
+      failedAt: batch.pass ? null : batch.results.length,
+      stoppedAt: batch.stoppedAt,
+      steps: publicStepFacts(batch.steps),
+      waitedMilliseconds: batch.durationMilliseconds,
+      modelPolls: 0,
+      ownerWakeupsAvoided: Math.max(0, terminals.length - 1),
+      samplingBoundariesAvoided: Math.max(0, terminals.length - 1),
+    },
+  }) });
+}
+function publicStepFacts(steps) {
+  return steps?.map((step) => Object.fromEntries(Object.entries(step).filter(([key]) => key !== 'evidence')));
+}
+
 async function handle(message) {
   if (message.id == null) return;
   try {
@@ -311,14 +596,47 @@ async function handle(message) {
     else if (message.method === 'tools/call' && ['terminal', 'terminal_supervise', 'terminal_start'].includes(message.params?.name)) {
       await handleTerminalExecution(message, message.params.name);
     }
+    else if (message.method === 'tools/call' && message.params?.name === 'terminal_batch') {
+      await handleTerminalBatchExecution(message);
+    }
+    else if (message.method === 'tools/call' && message.params?.name === 'terminal_batch_start') {
+      const args = message.params.arguments ?? {};
+      let started;
+      try {
+        started = startBackgroundTerminalBatchJob({
+          commands: args.commands,
+          allowedKeys: terminalBatchCommandKeys,
+          cwd: args.cwd,
+          timeoutMilliseconds: args.timeoutSeconds * 1000,
+        });
+      } catch {
+        const text = 'FAIL|calls=0|error=terminal-batch-invalid-command|terminal=1|batch=1|background=1|model=0';
+        send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, { isError: true, structuredContent: { calls: 0, requested: Array.isArray(args.commands) ? args.commands.length : 0, modelPolls: 0 } }) });
+        return;
+      }
+      const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+      const status = confirmed.state.status;
+      const failed = status === 'failed';
+      const text = `${failed ? 'FAIL' : 'MORE'}|calls=0|requested=${args.commands.length}|status=${status}|job=${started.handle}|background=1|terminal=1|batch=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0`;
+      send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+        isError: failed,
+        structuredContent: { job: started.handle, status, requested: args.commands.length, timeoutMilliseconds: started.timeoutMilliseconds, startupConfirmed: confirmed.confirmed, modelPolls: 0 },
+      }) });
+    }
     else if (message.method === 'tools/call' && ['observe', 'run', 'supervise'].includes(message.params?.name)) {
       await handleExecution(message, message.params.name);
+    } else if (message.method === 'tools/call' && message.params?.name === 'batch') {
+      await handleBatchExecution(message);
     } else if (message.method === 'tools/call' && message.params?.name === 'job_start') {
       const args = message.params.arguments ?? {};
       const started = startBackgroundJob({ ...args, timeoutMilliseconds: args.timeoutSeconds * 1000 });
-      const text = `MORE|calls=0|status=queued|job=${started.handle}|background=1|polls=0|model=0`;
+      const confirmed = await confirmBackgroundJobStart({ handle: started.handle });
+      const status = confirmed.state.status;
+      const failed = status === 'failed';
+      const text = `${failed ? 'FAIL' : 'MORE'}|calls=0|status=${status}|job=${started.handle}|background=1|startupMs=${confirmed.waitedMilliseconds}|polls=0|model=0`;
       send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
-        structuredContent: { job: started.handle, status: started.status, timeoutMilliseconds: started.timeoutMilliseconds, modelPolls: 0 },
+        isError: failed,
+        structuredContent: { job: started.handle, status, timeoutMilliseconds: started.timeoutMilliseconds, startupConfirmed: confirmed.confirmed, modelPolls: 0 },
       }) });
     } else if (message.method === 'tools/call' && message.params?.name === 'job_wait') {
       const args = message.params.arguments ?? {};
@@ -330,6 +648,32 @@ async function handle(message) {
         }) });
       } else if (waited.state.result) {
         const stored = waited.state.result;
+        if (args.responseMode === 'compressed') {
+          const envelope = await compressedEvidence(stored.evidenceBody ?? stored.adaptiveEvidence ?? '', {
+            maxBytes: args.maxBytes ?? 8192,
+            operation: waited.state.operation,
+            commandRawBytes: stored.rawBytes ?? stored.savings?.rawBytes ?? null,
+            cwd: waited.state.cwd,
+          });
+          savingsMeter.record(envelope.savings, {
+            ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0,
+            samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
+          });
+          send({ jsonrpc: '2.0', id: message.id, result: contentResult(envelope.text, {
+            isError: stored.text?.startsWith('FAIL|') === true,
+            structuredContent: compressedStructuredContent(envelope, {
+              job: args.job,
+              status: waited.state.status,
+              commandRawBytes: stored.rawBytes ?? stored.savings?.rawBytes ?? null,
+              commandMilliseconds: stored.durationMilliseconds,
+              waitedMilliseconds: waited.waitedMilliseconds,
+              steps: publicStepFacts(stored.steps),
+              ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0,
+              samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
+            }),
+          }) });
+          return;
+        }
         if (args.responseMode === 'evidence') {
           const evidence = evidenceOutput({
             exitCode: stored.exitCode ?? (stored.text?.startsWith('FAIL|') ? 1 : 0),
@@ -338,9 +682,9 @@ async function handle(message) {
             command: stored.command,
             maxBytes: args.maxBytes ?? 8192,
             rawBytesOverride: stored.rawBytes ?? stored.savings?.rawBytes ?? null,
-            facts: ['background=1', `job=${args.job}`, 'polls=0', `waitMs=${waited.waitedMilliseconds}`],
+            facts: ['background=1', `job=${args.job}`, 'polls=0', `waitMs=${waited.waitedMilliseconds}`, ...(stored.requested > 1 ? [`wakeupsAvoided=${stored.avoidedOwnerWakeups}`, `boundariesAvoided=${stored.avoidedSamplingBoundaries}`] : [])],
           });
-          savingsMeter.record(evidence.savings);
+          savingsMeter.record(evidence.savings, { ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0, samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0 });
           send({ jsonrpc: '2.0', id: message.id, result: contentResult(evidence.text, {
             isError: !evidence.pass,
             structuredContent: {
@@ -352,6 +696,9 @@ async function handle(message) {
               rawBytes: evidence.rawBytes,
               shownBytes: evidence.shownBytes,
               clipped: evidence.more,
+              steps: publicStepFacts(stored.steps),
+              ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0,
+              samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
             },
           }) });
           return;
@@ -361,8 +708,11 @@ async function handle(message) {
           operation: waited.state.operation,
           command: stored.command,
           adaptiveEvidence: stored.adaptiveEvidence,
-        }, { ...args, cwd: waited.state.cwd }, ['background=1', `job=${args.job}`, 'polls=0', `waitMs=${waited.waitedMilliseconds}`]);
-        savingsMeter.record(routed.savings);
+        }, { ...args, cwd: waited.state.cwd }, ['background=1', `job=${args.job}`, 'polls=0', `waitMs=${waited.waitedMilliseconds}`, ...(stored.requested > 1 ? [`wakeupsAvoided=${stored.avoidedOwnerWakeups}`, `boundariesAvoided=${stored.avoidedSamplingBoundaries}`] : [])]);
+        savingsMeter.record(routed.savings, {
+          ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0,
+          samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
+        });
         send({ jsonrpc: '2.0', id: message.id, result: contentResult(routed.text, {
           isError: routed.text.startsWith('FAIL|'),
           structuredContent: {
@@ -371,6 +721,9 @@ async function handle(message) {
             commandMilliseconds: stored.durationMilliseconds,
             waitedMilliseconds: waited.waitedMilliseconds,
             modelPolls: 0,
+            steps: publicStepFacts(stored.steps),
+            ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0,
+            samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
           },
         }) });
       } else {
@@ -390,6 +743,53 @@ async function handle(message) {
       }) });
     } else if (message.method === 'tools/call' && message.params?.name === 'savings') {
       send({ jsonrpc: '2.0', id: message.id, result: contentResult(formatTokenSavings(savingsMeter.snapshot())) });
+    } else if (message.method === 'tools/call' && message.params?.name === 'compression_retrieve') {
+      const args = message.params.arguments ?? {};
+      let retrieved;
+      try { retrieved = await configuredCompressionService().retrieve(args.handle, { query: args.query ?? null, maxBytes: args.maxBytes ?? 8192 }); } catch {
+        const text = 'FAIL|calls=0|error=compression-handle-unavailable|model=0';
+        send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, { isError: true, structuredContent: { modelPolls: 0 } }) });
+        return;
+      }
+      const header = `OK|calls=1|retrieve=1|backend=${retrieved.backend}|raw=${retrieved.rawBytes}|shown=${retrieved.shownBytes}${retrieved.clipped ? '|more=1' : ''}|handle=${args.handle}|model=0`;
+      const text = retrieved.content ? `${header}\n${retrieved.content}` : header;
+      send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+        structuredContent: { backend: retrieved.backend, rawBytes: retrieved.rawBytes, shownBytes: retrieved.shownBytes, clipped: retrieved.clipped, modelPolls: 0 },
+      }) });
+    } else if (message.method === 'tools/call' && message.params?.name === 'rollout_audit') {
+      const args = message.params.arguments ?? {};
+      if (!Array.isArray(args.rollouts) || args.rollouts.length < 1 || args.rollouts.length > 8) throw new Error('rollout_audit requires 1..8 rollout paths');
+      const reports = [];
+      for (const path of args.rollouts) reports.push(await analyzeRollout(path, { sinceMs: args.sinceMs ?? 0 }));
+      const report = reports.length === 1 ? reports[0] : aggregateRolloutMetrics(reports);
+      const groups = reports.flatMap((entry) => entry.date_groups ?? []);
+      const settings = loadSettings();
+      const triggered = groups.flatMap((group) => [
+        ...(group.samples_per_user !== null && group.samples_per_user > settings.migration.samplesPerUserThreshold ? [{ task_id: group.task_id, date: group.date, code: 'samples-per-user-high', value: group.samples_per_user, threshold: settings.migration.samplesPerUserThreshold }] : []),
+        ...(group.estimated_context_tokens > settings.migration.contextTokensThreshold ? [{ task_id: group.task_id, date: group.date, code: 'estimated-context-high', value: group.estimated_context_tokens, threshold: settings.migration.contextTokensThreshold }] : []),
+      ]);
+      const migrationRequested = settings.migration.autoMigrate && triggered.length > 0;
+      const samples = reports.reduce((sum, entry) => sum + entry.sampling.samples, 0);
+      const userTurns = reports.reduce((sum, entry) => sum + entry.sampling.user_messages, 0);
+      const averageContext = samples ? Math.round(reports.reduce((sum, entry) => sum + entry.sampling.observed_input_tokens, 0) / samples) : 0;
+      const prefix = migrationRequested ? 'MORE' : triggered.length ? 'MORE' : 'OK';
+      const text = `${prefix}|calls=${reports.length}|audit=rollout|samples=${samples}|turns=${userTurns}|spu=${userTurns ? Number((samples / userTurns).toFixed(2)) : 0}|ctx=${averageContext}|warnings=${triggered.length}|migrate=${migrationRequested ? 1 : 0}|archive=${migrationRequested && settings.migration.archiveOldSession ? 1 : 0}|rawLogged=1|billing=0|model=0`;
+      send({ jsonrpc: '2.0', id: message.id, result: contentResult(text, {
+        structuredContent: {
+          schema: 'helioterm-rollout-migration-decision-v1',
+          groups,
+          warnings: triggered,
+          migration: {
+            enabled: settings.migration.autoMigrate,
+            requested: migrationRequested,
+            archiveOldSession: migrationRequested && settings.migration.archiveOldSession,
+            protocol: 'desktop-owner-compact-handoff-v1',
+          },
+          accountingNotice: report.accounting_notice,
+          privacy: 'prompt, command, environment, stdin, secret, and tool-output content omitted',
+          modelPolls: 0,
+        },
+      }) });
     } else if (message.method === 'tools/call' && message.params?.name === 'luna_context') {
       const context = contextForAdaptiveTicket(message.params.arguments?.ticket);
       send({ jsonrpc: '2.0', id: message.id, result: contentResult(context.prompt, {
@@ -412,7 +812,8 @@ function isLongRequest(message) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   let queue = Promise.resolve();
-  readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const transport = readline.createInterface({ input: process.stdin });
+  transport.on('line', (line) => {
     if (!line.trim()) return;
     try {
       const message = JSON.parse(line);
@@ -421,6 +822,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       else queue = queue.then(() => handle(message));
     } catch { /* ignore malformed transport lines */ }
   });
-  process.on('SIGINT', () => process.exit(0));
-  process.on('SIGTERM', () => process.exit(0));
+  transport.on('close', () => void queue.finally(() => compressionService?.close()));
+  process.on('SIGINT', () => { compressionService?.close(); process.exit(0); });
+  process.on('SIGTERM', () => { compressionService?.close(); process.exit(0); });
 }

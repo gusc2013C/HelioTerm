@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0 - 2026-08-17
+
+- Add Headroom-inspired deterministic importance routing for terminal, JSON/JSONL, and log evidence, preserving failures, numeric outliers, change points, and boundaries while protecting code and diffs from semantic rewriting.
+- Add opt-in MCP `responseMode=compressed` and one `compression_retrieve` interface with TTL-bound opaque handles; keep existing compact and exact evidence APIs unchanged.
+- Add an internal stdio MCP adapter for Headroom's `headroom_compress`, `headroom_retrieve`, and optional `headroom_stats` tools. Real Headroom 0.34.0 benchmarks narrow `auto` to large nested JSON objects, keep stronger deterministic routes local, route ordinary semantic text through the existing opaque Desktop Luna channel, avoid model-visible intermediary calls, and fail open to native compression.
+- Add `ht config` settings for backend choice, minimum size, Headroom launch command/arguments/deadline, and local retrieval TTL. Native mode remains the default and starts no external service.
+- Credit the Headroom Contributors and distinguish exact bytes, content estimates, sampling-boundary savings, and provider billing.
+- Add a no-LLM whole-context Headroom benchmark covering 14.8K–191.5K-token synthetic conversations, critical-fact retention, exact protected messages, tool-call integrity, 120K budget compliance, and incremental prefix stability without retaining context bodies.
+
+## 0.3.1 - 2026-08-10
+
+- Add `terminal_batch_start` plus the source/short-runner `batch-bg` path for atomically validated two-to-four-command background workflows with one opaque handle, sequential stop-on-failure execution, one final wait, cancellation, seven-day state recovery, bounded per-step evidence, and sensitive payload cleanup.
+- Add deterministic owner-wakeup and model-sampling-boundary proxies to batch results and the savings meter; bytes/4 remains explicitly a tool-content estimate, never Desktop quota or provider billing.
+- Expand rollout auditing with per-task/per-date token, sampling, wrapper, output-byte, and compaction summaries plus advisory 40-samples/user and 120K-context thresholds without AI, prompt retention, or automatic task lifecycle actions.
+- Add the read-only `rollout_audit` MCP decision tool and `ht config` settings for opt-in Desktop owner migration and separately opt-in old-task archival. The MCP child remains unable to invoke lifecycle APIs; automatic handoff is performed by the owner workflow only after a positive deterministic decision.
+- Require an explicit `<helioterm_luna_leaf ticket="...">` marker and temporary-compressor identity before the Luna leaf guard activates; ordinary `codex_delegation` handoffs and `source_thread_id` values remain owner work.
+
+## 0.3.0 - 2026-08-10
+
+- Add a read-only MCP `batch` tool that exposes the existing four-operation parallel runner and collapses known independent observations into one owner/model round trip.
+- Add a sequential `terminal_batch` for two to four arbitrary commands known up front, with whole-batch validation and mandatory stop on first failure; do not parallelize mutations or absorb dependent planning.
+- Add a privacy-preserving rollout metrics parser that counts token deltas, cache ratio, sampling frequency, wrapper fan-out, and tool-output bytes without retaining prompt, command, or output content.
+- Add matched real MCP client/server benchmarks across three repositories; keep provider billing and Codex quota estimates explicitly out of scope.
+
 ## 0.2.0 - 2026-08-10
 
 - Register the structured MCP server as the primary Desktop terminal interface while retaining a short `ht`/`helioterm` executable for existing tasks whose MCP projection is fixed until a new task starts.

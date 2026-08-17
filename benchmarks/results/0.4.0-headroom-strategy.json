@@ -1,0 +1,744 @@
+{
+  "schema": "HELIOTERM_HEADROOM_STRATEGY_BENCHMARK_V1",
+  "generatedAt": "2026-08-10T07:41:09.036Z",
+  "startedAt": "2026-08-10T07:39:49.576Z",
+  "platform": "win32",
+  "node": "v24.13.0",
+  "rounds": 3,
+  "maxVisibleBytes": 32768,
+  "accountingNotice": "Exact content bytes and wall time only; no Desktop quota or provider billing inference.",
+  "corpora": [
+    {
+      "name": "structured-json",
+      "rawBytes": 46758
+    },
+    {
+      "name": "application-log",
+      "rawBytes": 41297
+    },
+    {
+      "name": "real-tap-output",
+      "rawBytes": 1133
+    },
+    {
+      "name": "source-code",
+      "rawBytes": 17376
+    },
+    {
+      "name": "git-diff",
+      "rawBytes": 28141
+    },
+    {
+      "name": "project-readme",
+      "rawBytes": 30775
+    },
+    {
+      "name": "generic-prose",
+      "rawBytes": 31478
+    },
+    {
+      "name": "html-tool-output",
+      "rawBytes": 30136
+    },
+    {
+      "name": "csv-table",
+      "rawBytes": 16326
+    },
+    {
+      "name": "nested-json-object",
+      "rawBytes": 21102
+    }
+  ],
+  "native": [
+    {
+      "corpus": "structured-json",
+      "rawBytes": 46793,
+      "visibleBytes": 4014,
+      "reductionPercent": 91.422,
+      "backend": "native",
+      "format": "json-array",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.935,
+      "firstMilliseconds": 3.547,
+      "warmMedianMilliseconds": 4.381,
+      "transforms": [
+        "json-minify",
+        "importance-sample"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "application-log",
+      "rawBytes": 41322,
+      "visibleBytes": 1989,
+      "reductionPercent": 95.187,
+      "backend": "native",
+      "format": "log",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.997,
+      "firstMilliseconds": 3.754,
+      "warmMedianMilliseconds": 3.653,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "real-tap-output",
+      "rawBytes": 1158,
+      "visibleBytes": 1157,
+      "reductionPercent": 0.086,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.879,
+      "firstMilliseconds": 3.302,
+      "warmMedianMilliseconds": 3.181,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "source-code",
+      "rawBytes": 17401,
+      "visibleBytes": 17401,
+      "reductionPercent": 0,
+      "backend": "pass",
+      "format": "code",
+      "compressed": false,
+      "retrievable": false,
+      "retrievalCorrect": null,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": null,
+      "firstMilliseconds": 1.206,
+      "warmMedianMilliseconds": 1.298,
+      "transforms": [
+        "protected-pass-through"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "git-diff",
+      "rawBytes": 28166,
+      "visibleBytes": 28166,
+      "reductionPercent": 0,
+      "backend": "pass",
+      "format": "diff",
+      "compressed": false,
+      "retrievable": false,
+      "retrievalCorrect": null,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": null,
+      "firstMilliseconds": 1.081,
+      "warmMedianMilliseconds": 1.013,
+      "transforms": [
+        "protected-pass-through"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "project-readme",
+      "rawBytes": 30800,
+      "visibleBytes": 9173,
+      "reductionPercent": 70.218,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.616,
+      "firstMilliseconds": 5.907,
+      "warmMedianMilliseconds": 5.273,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "generic-prose",
+      "rawBytes": 31503,
+      "visibleBytes": 5106,
+      "reductionPercent": 83.792,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": false,
+      "retrievalMilliseconds": 0.554,
+      "firstMilliseconds": 5.899,
+      "warmMedianMilliseconds": 6.486,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "html-tool-output",
+      "rawBytes": 30161,
+      "visibleBytes": 4425,
+      "reductionPercent": 85.329,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": false,
+      "retrievalMilliseconds": 0.665,
+      "firstMilliseconds": 7.463,
+      "warmMedianMilliseconds": 7.26,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "csv-table",
+      "rawBytes": 16351,
+      "visibleBytes": 1344,
+      "reductionPercent": 91.78,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": false,
+      "retrievalMilliseconds": 0.859,
+      "firstMilliseconds": 6.45,
+      "warmMedianMilliseconds": 7.975,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "nested-json-object",
+      "rawBytes": 21135,
+      "visibleBytes": 16860,
+      "reductionPercent": 20.227,
+      "backend": "native",
+      "format": "json",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.59,
+      "firstMilliseconds": 10.893,
+      "warmMedianMilliseconds": 9.492,
+      "transforms": [
+        "json-minify"
+      ],
+      "fallback": false
+    }
+  ],
+  "headroom": {
+    "startupMilliseconds": 734.232,
+    "results": [
+      {
+        "corpus": "structured-json",
+        "rawBytes": 46802,
+        "visibleBytes": 29818,
+        "reductionPercent": 36.289,
+        "backend": "headroom",
+        "compressed": true,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 6.436,
+        "firstMilliseconds": 2385.143,
+        "warmMedianMilliseconds": 2079.417,
+        "transforms": [
+          "router:mixed:0.51"
+        ]
+      },
+      {
+        "corpus": "application-log",
+        "rawBytes": 41331,
+        "visibleBytes": 32768,
+        "reductionPercent": 20.718,
+        "backend": "headroom",
+        "compressed": true,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 7.294,
+        "firstMilliseconds": 2095.687,
+        "warmMedianMilliseconds": 2073.327,
+        "transforms": [
+          "router:search:0.65"
+        ]
+      },
+      {
+        "corpus": "real-tap-output",
+        "rawBytes": 1167,
+        "visibleBytes": 1167,
+        "reductionPercent": 0,
+        "backend": "headroom",
+        "compressed": false,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 2.692,
+        "firstMilliseconds": 2056.325,
+        "warmMedianMilliseconds": 2066.231,
+        "transforms": [
+          "router:protected:error_output"
+        ]
+      },
+      {
+        "corpus": "source-code",
+        "rawBytes": 17410,
+        "visibleBytes": 17410,
+        "reductionPercent": 0,
+        "backend": "headroom",
+        "compressed": false,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 4.454,
+        "firstMilliseconds": 2062.825,
+        "warmMedianMilliseconds": 2064.493,
+        "transforms": [
+          "router:protected:recent_code"
+        ]
+      },
+      {
+        "corpus": "git-diff",
+        "rawBytes": 28175,
+        "visibleBytes": 28145,
+        "reductionPercent": 0.106,
+        "backend": "headroom",
+        "compressed": true,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 4.99,
+        "firstMilliseconds": 2078.568,
+        "warmMedianMilliseconds": 2067.838,
+        "transforms": [
+          "router:diff:1.00"
+        ]
+      },
+      {
+        "corpus": "project-readme",
+        "rawBytes": 30809,
+        "visibleBytes": 30809,
+        "reductionPercent": 0,
+        "backend": "headroom",
+        "compressed": false,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 7.094,
+        "firstMilliseconds": 3377.334,
+        "warmMedianMilliseconds": 2073.878,
+        "transforms": [
+          "router:noop"
+        ]
+      },
+      {
+        "corpus": "generic-prose",
+        "rawBytes": 31512,
+        "visibleBytes": 31512,
+        "reductionPercent": 0,
+        "backend": "headroom",
+        "compressed": false,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 5.482,
+        "firstMilliseconds": 2082.064,
+        "warmMedianMilliseconds": 2061.977,
+        "transforms": [
+          "router:noop"
+        ]
+      },
+      {
+        "corpus": "html-tool-output",
+        "rawBytes": 30170,
+        "visibleBytes": 23425,
+        "reductionPercent": 22.357,
+        "backend": "headroom",
+        "compressed": true,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 5.327,
+        "firstMilliseconds": 4071.713,
+        "warmMedianMilliseconds": 2055.802,
+        "transforms": [
+          "router:text:0.78"
+        ]
+      },
+      {
+        "corpus": "csv-table",
+        "rawBytes": 16360,
+        "visibleBytes": 15170,
+        "reductionPercent": 7.274,
+        "backend": "headroom",
+        "compressed": true,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 4.065,
+        "firstMilliseconds": 3120.868,
+        "warmMedianMilliseconds": 2065.697,
+        "transforms": [
+          "router:tabular:0.29"
+        ]
+      },
+      {
+        "corpus": "nested-json-object",
+        "rawBytes": 21144,
+        "visibleBytes": 596,
+        "reductionPercent": 97.181,
+        "backend": "headroom",
+        "compressed": true,
+        "retrievable": true,
+        "retrievalCorrect": true,
+        "sentinelVisible": true,
+        "retrievalMilliseconds": 4.216,
+        "firstMilliseconds": 2072.36,
+        "warmMedianMilliseconds": 2065.09,
+        "transforms": [
+          "router:smart_crusher:0.03"
+        ]
+      }
+    ],
+    "stats": {
+      "session_duration_seconds": 67,
+      "compressions": 30,
+      "retrievals": 10,
+      "total_input_tokens": 211014,
+      "total_output_tokens": 159195,
+      "total_tokens_saved": 51819,
+      "savings_percent": 24.6,
+      "estimated_cost_saved_usd": 0.1555,
+      "recent_events": [
+        {
+          "type": "compress",
+          "input_tokens": 7030,
+          "output_tokens": 6074,
+          "savings_percent": 13.6,
+          "strategy": "router:text:0.78",
+          "timestamp": 1786347641.7780578,
+          "pid": 32772
+        },
+        {
+          "type": "retrieve",
+          "hash": "5a474666e988",
+          "timestamp": 1786347643.8193707,
+          "pid": 32772
+        },
+        {
+          "type": "compress",
+          "input_tokens": 7528,
+          "output_tokens": 7240,
+          "savings_percent": 3.8,
+          "strategy": "router:tabular:0.29",
+          "timestamp": 1786347644.8864884,
+          "pid": 32772
+        },
+        {
+          "type": "compress",
+          "input_tokens": 7528,
+          "output_tokens": 7240,
+          "savings_percent": 3.8,
+          "strategy": "router:tabular:0.29",
+          "timestamp": 1786347646.9531865,
+          "pid": 32772
+        },
+        {
+          "type": "compress",
+          "input_tokens": 7528,
+          "output_tokens": 7240,
+          "savings_percent": 3.8,
+          "strategy": "router:tabular:0.29",
+          "timestamp": 1786347649.0200145,
+          "pid": 32772
+        },
+        {
+          "type": "retrieve",
+          "hash": "848feaf20417",
+          "timestamp": 1786347651.0766742,
+          "pid": 32772
+        },
+        {
+          "type": "compress",
+          "input_tokens": 4768,
+          "output_tokens": 134,
+          "savings_percent": 97.2,
+          "strategy": "router:smart_crusher:0.03",
+          "timestamp": 1786347651.0962424,
+          "pid": 32772
+        },
+        {
+          "type": "compress",
+          "input_tokens": 4768,
+          "output_tokens": 134,
+          "savings_percent": 97.2,
+          "strategy": "router:smart_crusher:0.03",
+          "timestamp": 1786347653.1606812,
+          "pid": 32772
+        },
+        {
+          "type": "compress",
+          "input_tokens": 4768,
+          "output_tokens": 134,
+          "savings_percent": 97.2,
+          "strategy": "router:smart_crusher:0.03",
+          "timestamp": 1786347655.2339451,
+          "pid": 32772
+        },
+        {
+          "type": "retrieve",
+          "hash": "c253ced1b458",
+          "timestamp": 1786347657.283655,
+          "pid": 32772
+        }
+      ],
+      "store": {
+        "entries": 23,
+        "max_entries": 1000
+      },
+      "sub_agents": {
+        "compressions": 67,
+        "retrievals": 20,
+        "tokens_saved": 100958,
+        "total_input_tokens": 445286,
+        "total_output_tokens": 344328
+      },
+      "combined": {
+        "total_compressions": 97,
+        "total_tokens_saved": 152777,
+        "savings_percent": 23.3,
+        "estimated_cost_saved_usd": 0.4583
+      },
+      "proxy": {
+        "url": "http://127.0.0.1:8787",
+        "status": "unreachable",
+        "error": "ConnectError: All connection attempts failed",
+        "warning": "Configured proxy http://127.0.0.1:8787 is unreachable (ConnectError: All connection attempts failed)."
+      },
+      "warning": "Configured proxy http://127.0.0.1:8787 is unreachable (ConnectError: All connection attempts failed)."
+    },
+    "version": "headroom, version 0.34.0",
+    "executable": "C:\\Users\\Infplane\\.local\\bin\\headroom.exe"
+  },
+  "auto": [
+    {
+      "corpus": "structured-json",
+      "rawBytes": 46791,
+      "visibleBytes": 4012,
+      "reductionPercent": 91.426,
+      "backend": "native",
+      "format": "json-array",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.923,
+      "firstMilliseconds": 13.247,
+      "warmMedianMilliseconds": 10.868,
+      "transforms": [
+        "json-minify",
+        "importance-sample"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "application-log",
+      "rawBytes": 41320,
+      "visibleBytes": 1987,
+      "reductionPercent": 95.191,
+      "backend": "native",
+      "format": "log",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.98,
+      "firstMilliseconds": 13.222,
+      "warmMedianMilliseconds": 11.667,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "real-tap-output",
+      "rawBytes": 1156,
+      "visibleBytes": 1155,
+      "reductionPercent": 0.087,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.779,
+      "firstMilliseconds": 11.76,
+      "warmMedianMilliseconds": 11.907,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "source-code",
+      "rawBytes": 17399,
+      "visibleBytes": 17399,
+      "reductionPercent": 0,
+      "backend": "pass",
+      "format": "code",
+      "compressed": false,
+      "retrievable": false,
+      "retrievalCorrect": null,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": null,
+      "firstMilliseconds": 0.901,
+      "warmMedianMilliseconds": 0.997,
+      "transforms": [
+        "protected-pass-through"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "git-diff",
+      "rawBytes": 28164,
+      "visibleBytes": 28164,
+      "reductionPercent": 0,
+      "backend": "pass",
+      "format": "diff",
+      "compressed": false,
+      "retrievable": false,
+      "retrievalCorrect": null,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": null,
+      "firstMilliseconds": 1.337,
+      "warmMedianMilliseconds": 1.759,
+      "transforms": [
+        "protected-pass-through"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "project-readme",
+      "rawBytes": 30798,
+      "visibleBytes": 9171,
+      "reductionPercent": 70.222,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 0.744,
+      "firstMilliseconds": 16.187,
+      "warmMedianMilliseconds": 13.899,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "generic-prose",
+      "rawBytes": 31501,
+      "visibleBytes": 5104,
+      "reductionPercent": 83.797,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": false,
+      "retrievalMilliseconds": 0.661,
+      "firstMilliseconds": 13.517,
+      "warmMedianMilliseconds": 13.224,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "html-tool-output",
+      "rawBytes": 30159,
+      "visibleBytes": 4423,
+      "reductionPercent": 85.334,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": false,
+      "retrievalMilliseconds": 0.888,
+      "firstMilliseconds": 15.217,
+      "warmMedianMilliseconds": 16.098,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "csv-table",
+      "rawBytes": 16349,
+      "visibleBytes": 1342,
+      "reductionPercent": 91.792,
+      "backend": "native",
+      "format": "text",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": false,
+      "retrievalMilliseconds": 0.638,
+      "firstMilliseconds": 15.708,
+      "warmMedianMilliseconds": 17.369,
+      "transforms": [
+        "importance-sample",
+        "head-tail"
+      ],
+      "fallback": false
+    },
+    {
+      "corpus": "nested-json-object",
+      "rawBytes": 21133,
+      "visibleBytes": 585,
+      "reductionPercent": 97.232,
+      "backend": "headroom",
+      "format": "headroom",
+      "compressed": true,
+      "retrievable": true,
+      "retrievalCorrect": true,
+      "sentinelVisible": true,
+      "retrievalMilliseconds": 7.106,
+      "firstMilliseconds": 3154.658,
+      "warmMedianMilliseconds": 2085.913,
+      "transforms": [
+        "router:smart_crusher:0.03"
+      ],
+      "fallback": false
+    }
+  ]
+}

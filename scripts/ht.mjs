@@ -14,8 +14,12 @@ const USAGE = `Usage:
   ht [-C <cwd>] [-t <seconds>] [-e [bytes]] [-s] [-n] <program> [args ...]
   ht [-C <cwd>] [-t <seconds>] exec <program> [args ...]
   ht [-C <cwd>] [-t <seconds>] [-E NAME=VALUE] [-i <stdin>] bg <program> [args ...]
+  ht [-C <cwd>] [-t <seconds>] batch-bg <base64url-json-command-array>
   ht [-C <cwd>] [-t <seconds>] [-e [bytes]] [-s] [-n] wait <job>
   ht [-C <cwd>] cancel <job>
+  ht config show
+  ht config set migration.<name> <value>
+  ht config set compression.<name> <value>
   ht [-C <cwd>] [-t <seconds>] shell <powershell|cmd|sh|bash> <script>
 
 Use exec before a program whose name collides with a deterministic operation.
@@ -148,6 +152,11 @@ export async function runShortCli(argv = process.argv.slice(2)) {
     if (!state.command.length) throw new Error('command is required');
 
     const [verb, ...rest] = state.command;
+    if (verb === 'config') {
+      const { runSettingsCli } = await import('./settings.mjs');
+      await runSettingsCli(rest);
+      return;
+    }
     if (verb === 'wait') {
       if (rest.length !== 1) throw new Error('wait requires one job handle');
       await runTerminalCli([...commonRunnerArguments(state), '--wait-job', rest[0]]);
@@ -160,6 +169,11 @@ export async function runShortCli(argv = process.argv.slice(2)) {
     }
     if (verb === 'bg') {
       await runTerminal(state, rest, ['--background']);
+      return;
+    }
+    if (verb === 'batch-bg') {
+      if (rest.length !== 1) throw new Error('batch-bg requires one base64url JSON command array');
+      await runTerminalCli([...commonRunnerArguments(state), '--background-batch-base64url', rest[0]]);
       return;
     }
     if (verb === 'exec') {

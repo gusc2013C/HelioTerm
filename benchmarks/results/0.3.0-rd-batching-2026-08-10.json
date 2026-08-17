@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "HELIOTERM_RD_V1",
+  "candidateVersion": "0.3.0",
+  "date": "2026-08-10",
+  "isolation": {
+    "developmentWorktree": "D:\\code\\HelioTerm-0.3-rd",
+    "developmentBranch": "codex/helioterm-0.3-rd",
+    "globalCheckout": "D:\\code\\HelioTerm",
+    "globalBranch": "codex/mcp-token-savings",
+    "globalCheckoutClean": true,
+    "pluginInstalled": false,
+    "desktopConfigurationChanged": false,
+    "existingTasksInterrupted": false
+  },
+  "source": {
+    "packageVersion": "0.3.0",
+    "testsPassed": 133,
+    "testsFailed": 0,
+    "preflightPassed": true,
+    "gitDiffCheckPassed": true,
+    "terminalBatchAtomicValidationPassed": true,
+    "terminalBatchStopOnFailurePassed": true,
+    "terminalBatchWholeBudgetTimeoutPassed": true,
+    "modelPolls": 0
+  },
+  "toolSchema": {
+    "stableToolCount": 12,
+    "stableUtf8Bytes": 9815,
+    "candidateToolCount": 14,
+    "candidateUtf8Bytes": 12022,
+    "addedUtf8Bytes": 2207,
+    "estimatedAddedContentTokens": 552,
+    "estimator": "utf8 bytes divided by four; provider billing not inferred"
+  },
+  "rolloutSnapshot": {
+    "rollouts": 2,
+    "recordedTotalTokens": 180090382,
+    "cachedInputPercent": 97.83,
+    "samplingEvents": 1374,
+    "userMessages": 16,
+    "execWrappers": 1285,
+    "singleNestedWrappers": 1185,
+    "heliotermSingleWrappers": 374,
+    "readOnlyBatchEligibleSingleWrappers": 86,
+    "modelVisibleToolOutputBytes": 3824541,
+    "projections": [
+      { "adoptionPercent": 25, "samplingRequestsAvoided": 15, "rawContextTokensAvoided": 1972965 },
+      { "adoptionPercent": 50, "samplingRequestsAvoided": 30, "rawContextTokensAvoided": 3945930 },
+      { "adoptionPercent": 100, "samplingRequestsAvoided": 63, "rawContextTokensAvoided": 8286453 }
+    ],
+    "privacy": "aggregate counters only; prompt, command, and output content not retained",
+    "scope": "counterfactual raw context; provider billing and quota weighting not inferred"
+  },
+  "readOnlyBatch": {
+    "roundsPerProject": 25,
+    "transport": "real MCP client/server",
+    "semantics": "four independent read-only observations, concurrent local execution",
+    "projects": [
+      {
+        "project": "HelioTerm-0.3-rd",
+        "profile": "node",
+        "baselineMedianMilliseconds": 67.054,
+        "batchMedianMilliseconds": 38.013,
+        "latencyReductionPercent": 43.31,
+        "requestReductionPercent": 52.18,
+        "responseReductionPercent": 57.53,
+        "modelToolRoundTripReductionPercent": 75
+      },
+      {
+        "project": "TactileGear",
+        "profile": "python",
+        "baselineMedianMilliseconds": 64.841,
+        "batchMedianMilliseconds": 37.033,
+        "latencyReductionPercent": 42.89,
+        "requestReductionPercent": 53.19,
+        "responseReductionPercent": 49.9,
+        "modelToolRoundTripReductionPercent": 75
+      },
+      {
+        "project": "heliolune",
+        "profile": "generic",
+        "baselineMedianMilliseconds": 68.546,
+        "batchMedianMilliseconds": 39.157,
+        "latencyReductionPercent": 42.88,
+        "requestReductionPercent": 53.54,
+        "responseReductionPercent": 53.35,
+        "modelToolRoundTripReductionPercent": 75
+      }
+    ]
+  },
+  "terminalBatch": {
+    "roundsPerProject": 15,
+    "transport": "real MCP client/server",
+    "semantics": "sequential, atomically validated, stop on first failure, one whole-batch timeout budget",
+    "projects": [
+      {
+        "project": "HelioTerm-0.3-rd",
+        "baselineMedianMilliseconds": 222.753,
+        "batchMedianMilliseconds": 221.868,
+        "latencyReductionPercent": 0.4,
+        "requestReductionPercent": 43,
+        "responseReductionPercent": 65.52,
+        "modelToolRoundTripReductionPercent": 75
+      },
+      {
+        "project": "TactileGear",
+        "baselineMedianMilliseconds": 222.801,
+        "batchMedianMilliseconds": 219.403,
+        "latencyReductionPercent": 1.52,
+        "requestReductionPercent": 42.29,
+        "responseReductionPercent": 65.52,
+        "modelToolRoundTripReductionPercent": 75
+      },
+      {
+        "project": "heliolune",
+        "baselineMedianMilliseconds": 221.548,
+        "batchMedianMilliseconds": 221.057,
+        "latencyReductionPercent": 0.22,
+        "requestReductionPercent": 42,
+        "responseReductionPercent": 65.52,
+        "modelToolRoundTripReductionPercent": 75
+      }
+    ],
+    "interpretation": "Sequential child work is not faster; savings come from eliminating owner resampling and repeated transport envelopes."
+  },
+  "realProjectRegression": [
+    { "project": "Heliolune", "testsPassed": 188, "testsFailed": 0, "workingTreeUnchangedByTests": true },
+    { "project": "TactileGear", "testsPassed": 34, "testsFailed": 0, "workingTreeUnchangedByTests": true }
+  ],
+  "releaseGate": {
+    "sourceCandidatePassed": true,
+    "globalReplacementEligible": false,
+    "missing": "fresh Desktop opt-in A/B proving tool selection, task quality, and quota movement after tool projection refresh"
+  },
+  "result": "rd-pass-global-replacement-deferred"
+}

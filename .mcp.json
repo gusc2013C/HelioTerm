@@ -7,7 +7,7 @@
       "startup_timeout_sec": 30,
       "tool_timeout_sec": 43260,
       "default_tools_approval_mode": "writes",
-      "enabled_tools": ["observe", "run", "supervise", "terminal", "terminal_supervise", "job_start", "terminal_start", "job_wait", "job_cancel", "savings", "luna_context", "luna_accept"]
+      "enabled_tools": ["observe", "batch", "run", "supervise", "terminal", "terminal_batch", "terminal_batch_start", "terminal_supervise", "job_start", "terminal_start", "job_wait", "job_cancel", "savings", "compression_retrieve", "rollout_audit", "luna_context", "luna_accept"]
     }
   }
 }

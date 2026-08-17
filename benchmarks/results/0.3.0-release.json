@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "HELIOTERM_RELEASE_V3",
+  "version": "0.3.0",
+  "pluginVersion": "0.3.0+codex.20260810043228",
+  "date": "2026-08-10",
+  "source": {
+    "branch": "codex/mcp-token-savings",
+    "candidateCommit": "882e83b",
+    "cachebusterCommit": "7148bad",
+    "testsPassed": 133,
+    "testsFailed": 0,
+    "preflightPassed": true,
+    "pluginValidationPassed": true,
+    "skillValidationPassed": true,
+    "gitDiffCheckPassed": true
+  },
+  "installedPlugin": {
+    "pluginId": "helioterm@helioterm",
+    "enabled": true,
+    "source": "D:\\code\\HelioTerm",
+    "cache": "C:\\Users\\Infplane\\.codex\\plugins\\cache\\helioterm\\helioterm\\0.3.0+codex.20260810043228",
+    "keySourceCacheHashesMatched": 7,
+    "testsPassed": 133,
+    "preflightPassed": true,
+    "mcpServerVersion": "0.3.0",
+    "mcpToolCount": 14,
+    "batchJsonRpcPassed": true,
+    "batchCalls": 4,
+    "batchModelPolls": 0,
+    "terminalBatchJsonRpcPassed": true,
+    "terminalBatchCalls": 2,
+    "terminalBatchModelPolls": 0
+  },
+  "globalEntry": {
+    "commands": ["ht", "helioterm"],
+    "version": "0.3.0",
+    "linkedToSource": true
+  },
+  "realProjects": [
+    { "project": "Heliolune", "testsPassed": 188, "testsFailed": 0, "modelPolls": 0 },
+    { "project": "TactileGear", "testsPassed": 34, "testsFailed": 0, "modelPolls": 0 }
+  ],
+  "transportBenchmarks": {
+    "readOnlyBatch": {
+      "projects": 3,
+      "roundsPerProject": 25,
+      "modelToolRoundTripReductionPercent": 75,
+      "requestReductionPercentRange": [52.18, 53.54],
+      "responseReductionPercentRange": [49.9, 57.53],
+      "latencyReductionPercentRange": [42.88, 43.31]
+    },
+    "terminalBatch": {
+      "projects": 3,
+      "roundsPerProject": 15,
+      "modelToolRoundTripReductionPercent": 75,
+      "requestReductionPercentRange": [42, 43],
+      "responseReductionPercent": 65.52,
+      "childExecutionSemantics": "sequential; no child-command speed claim"
+    },
+    "scope": "local MCP transport and counterfactual raw context; provider billing not inferred"
+  },
+  "desktopProjection": {
+    "existingTaskHotReloadExpected": false,
+    "freshTaskAcceptancePassed": false,
+    "nextGate": "start a new Codex Desktop task and confirm projected batch and terminal_batch selection",
+    "restartMayBeRequired": true
+  },
+  "result": "installed-awaiting-fresh-task-projection-acceptance",
+  "claim": "HelioTerm 0.3.0 source, global short entry, installed cache, both batch tools, and real-project regressions passed. Provider billing savings and fresh-task Sol selection remain outside this installed-task proof."
+}

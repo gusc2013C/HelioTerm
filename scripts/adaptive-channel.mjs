@@ -121,7 +121,10 @@ function semanticGitPatch(result) {
 }
 
 function semanticOperationScore(result, { diverseEvidence, diagnosticEvidence, semantic }) {
-  if (!String(result.text ?? '').startsWith('OK|')) return 4;
+  if (!String(result.text ?? '').startsWith('OK|')) {
+    const diagnosticOperation = ['build', 'bench', 'check', 'test', 'pytest'].includes(result.operation);
+    return diagnosticOperation && diagnosticEvidence ? 3 : 0;
+  }
   if (semanticGitPatch(result)) return 4;
   if (field(result.text, 'more') !== '1') return 0;
   const diagnosticOperation = ['build', 'bench', 'check'].includes(result.operation);
@@ -141,10 +144,16 @@ export function classifyAdaptiveCompression({ results, semantic = false } = {}) 
   const evidence = entries.map((result) => `[${result.operation}]\n${result.adaptiveEvidence ?? ''}`).join('\n');
   const diverseEvidence = evidenceDiversity(evidence) >= 4;
   const diagnosticEvidence = /(?:^|\b)(?:assert(?:ion)?error|error|exception|fail(?:ed|ure)?|panic|traceback|warn(?:ing)?)(?:\b|:)/iu.test(evidence);
-  const automaticScore = entries.reduce((maximum, result) => Math.max(maximum, semanticOperationScore(result, { diverseEvidence, diagnosticEvidence, semantic })), 0);
+  const crossModule = distinctSourceAreas(evidence) > 1;
+  const failuresAreDiagnostic = failures.length > 1
+    && failures.every((result) => ['build', 'bench', 'check', 'test', 'pytest'].includes(result.operation));
+  const automaticFailureScore = failuresAreDiagnostic && crossModule && diverseEvidence ? 3 : 0;
+  const automaticScore = Math.max(
+    automaticFailureScore,
+    entries.reduce((maximum, result) => Math.max(maximum, semanticOperationScore(result, { diverseEvidence, diagnosticEvidence, semantic })), 0),
+  );
   const semanticScore = semantic && (truncated || materialFailure || materialChange) ? Math.max(3, automaticScore) : automaticScore;
   const semanticSummaryRequired = semanticScore > 0;
-  const crossModule = distinctSourceAreas(evidence) > 1;
   const complexFailure = failures.length > 1 || (materialFailure && rawBytes >= 32 * 1024);
   const causalAnalysis = semanticScore === 4 && materialChange && crossModule && rawBytes >= 16 * 1024;
   const useLuna = shouldUseLunaCompression({ rawBytes, materialFailure, materialChange, truncated, semanticSummaryRequired, semanticScore });

@@ -23,7 +23,7 @@ test('package registers both short and descriptive executable names', () => {
 test('short CLI reports the release version and concise help', () => {
   const version = run(['--version']);
   assert.equal(version.status, 0, version.stderr || version.stdout);
-  assert.equal(version.stdout.trim(), '0.4.0');
+  assert.equal(version.stdout.trim(), '0.4.1');
   const help = run(['--help']);
   assert.equal(help.status, 0, help.stderr || help.stdout);
   assert.match(help.stdout, /^Usage:\n  ht /u);

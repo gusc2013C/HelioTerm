@@ -2,7 +2,7 @@
 
 HelioTerm is a small, independently usable semantic terminal for Codex Desktop. Its default direct path executes bounded operations through a deterministic compressor, then routes evidence with real semantic value through an opaque local ticket to one temporary Desktop-native Luna session. Complete machine facts remain `model=0`; failures, real patches, and diverse truncated source/search/build evidence can use Luna/high without making Sol poll a terminal.
 
-HelioTerm is also bundled by default in Heliolune 0.8 alpha.3, but this repository is self-contained for users who only need the terminal component.
+HelioTerm is also bundled by default in Heliolune 0.8.1, but this repository is self-contained for users who only need the terminal component.
 
 ## What it guarantees
 
@@ -27,7 +27,7 @@ The rule-first `direct-runner.mjs` path is the default. Its CLI enables adaptive
 
 The MCP server exposes seventeen tools: read-only `observe` and `batch`; deterministic `run` and `supervise`; universal `terminal`, `terminal_batch`, `terminal_batch_start`, and `terminal_supervise`; deterministic/universal background starts; shared `job_wait` and `job_cancel`; `savings`; `compression_retrieve`; privacy-preserving `rollout_audit`; and the two Luna ticket tools. `batch` accepts two to four independent read-only observations with one shared working directory. Both terminal batch paths accept two to four preplanned commands, validate all of them before execution, run them sequentially, and stop at the first failure. This structured tool surface is the primary Desktop interface. Compact mode is the default; bounded exact evidence and reversible compressed evidence are explicit. Arbitrary execution is truthfully marked destructive and open-world. Completed or cancelled arbitrary jobs erase persisted command, environment, and stdin fields; terminal batches retain only per-step exit, duration, byte counts, and bounded evidence.
 
-For an existing task whose MCP tool projection cannot refresh until a new task starts, install the short local executable once with `npm link`. It removes both the absolute script path and the `T|...` request envelope:
+Ordinary plugin use does not require `npm link`: install the plugin and run `$helioterm` from a new Codex task. The short `ht` executable is available directly from a checkout, and `npm link` is an optional convenience only when a global `ht`/`helioterm` command is desired:
 
 ```powershell
 ht -C . test tests/*.test.mjs
@@ -151,13 +151,25 @@ MCP servers cannot invoke Codex Desktop task lifecycle APIs. Therefore `rollout_
 ## Install from this checkout
 
 ```powershell
-codex plugin marketplace add .
-codex plugin add helioterm@helioterm
-npm link
-node scripts/install-project.mjs --project <your-project> --write
+node scripts/bootstrap-install.mjs --project C:\path\to\your-project --write
 ```
 
-The project installer is idempotent and refuses to overwrite a conflicting `helioterm` role. It copies the role into the target project's `.codex/agents` directory and registers it in `.codex/config.toml`. After an update that changes MCP tools, fully restart Codex Desktop and then start a new task; a new projectless task inside the same pre-restart App session can retain the old MCP projection. A skill-only or model-binding change needs a new task. Then invoke `$helioterm`.
+The bootstrap registers the local marketplace in the active Codex profile, installs `helioterm`, runs the idempotent project installer, and executes preflight. It refuses to overwrite a conflicting `helioterm` role. Use `--codex-home <isolated-directory>` only for CI or disposable testing, and `--skip-codex` only for an isolated source smoke test. After an update that changes MCP tools, fully restart Codex Desktop and then start a new task; a new projectless task inside the same pre-restart App session can retain the old MCP projection. A skill-only or model-binding change needs a new task. Then invoke `$helioterm`.
+
+For a direct Git marketplace install, pin the release tag explicitly:
+
+```powershell
+codex plugin marketplace add gusc2013C/HelioTerm --ref v0.4.1
+codex plugin add helioterm@helioterm
+```
+
+## Build release assets
+
+Maintainers build the exact public ZIP and checksum from a clean `main` checkout. The packager extracts the archive, reruns preflight, and performs an isolated bootstrap smoke before emitting the SHA256 file:
+
+```powershell
+pwsh -NoProfile -File .\scripts\package-release.ps1
+```
 
 ## Change the model binding
 

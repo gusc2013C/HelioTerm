@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.4.0",
+  "version": "0.4.1+codex.20260818085507",
   "description": "Semantic terminal compression, optional Headroom MCP interoperability, intelligent Desktop Luna routing, and background command supervision without model polling.",
   "author": {
     "name": "Sicheng Gu",

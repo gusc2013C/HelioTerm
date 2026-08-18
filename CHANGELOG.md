@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 - 2026-08-18
+
+### Installation hardening
+
+- Add an explicit bootstrap command that previews writes, supports an isolated `CODEX_HOME` for CI, installs the project role, and runs preflight.
+- Make ordinary plugin use independent of `npm link`; global `ht` linking remains an optional checkout convenience.
+- Pin the direct Git marketplace example to `v0.4.1` and smoke-test source installation in an isolated CI project.
+- Produce a versioned release ZIP plus SHA256 and validate preflight and bootstrap from the extracted archive before publication.
+
 ## 0.4.0 - 2026-08-17
 
 - Add Headroom-inspired deterministic importance routing for terminal, JSON/JSONL, and log evidence, preserving failures, numeric outliers, change points, and boundaries while protecting code and diffs from semantic rewriting.

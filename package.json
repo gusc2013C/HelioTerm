@@ -1,6 +1,6 @@
 {
   "name": "helioterm",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "A model-bound semantic terminal and compact tool-output firewall for Codex Desktop.",
@@ -11,7 +11,9 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "preflight": "node scripts/preflight.mjs --compact",
-    "direct": "node scripts/direct-runner.mjs"
+    "direct": "node scripts/direct-runner.mjs",
+    "bootstrap": "node scripts/bootstrap-install.mjs",
+    "release:package": "pwsh -NoProfile -File scripts/package-release.ps1"
   },
   "license": "MIT"
 }

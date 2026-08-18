@@ -62,6 +62,38 @@ test('adaptive routing uses semantic value instead of one coarse size gate', () 
   assert.equal(requested.reason, 'requested');
 });
 
+test('ordinary command failures stay deterministic while semantic diagnostics still route', () => {
+  const commandFailure = observed({
+    text: 'FAIL|calls=1|exit=2|more=1|raw=8800',
+    raw: `usage: tool --required <value>\n${'parameter value is invalid\n'.repeat(320)}`,
+    operation: 'terminal',
+    args: ['tool', '--invalid'],
+  });
+  const missingPath = observed({
+    text: 'FAIL|calls=1|exit=2|more=1|raw=6700',
+    raw: `rg: missing path: No such file or directory\n${'No such file or directory\n'.repeat(240)}`,
+    operation: 'files',
+    args: ['missing-path'],
+  });
+  const batchFailure = classifyAdaptiveCompression({ results: [commandFailure, missingPath] });
+  assert.equal(batchFailure.useLuna, false);
+  assert.equal(batchFailure.semanticScore, 0);
+
+  const requested = classifyAdaptiveCompression({ results: [commandFailure], semantic: true });
+  assert.equal(requested.useLuna, true);
+  assert.equal(requested.semanticScore, 3);
+
+  const diagnostic = observed({
+    text: 'FAIL|calls=1|exit=1|more=1|raw=4096',
+    raw: Array.from({ length: 80 }, (_, index) => `AssertionError: expected ${index} in src/module-${index % 4}/case-${index}.mjs`).join('\n'),
+    operation: 'test',
+    args: ['tests/diagnostic.test.mjs'],
+  });
+  const diagnosticDecision = classifyAdaptiveCompression({ results: [diagnostic] });
+  assert.equal(diagnosticDecision.useLuna, true);
+  assert.equal(diagnosticDecision.semanticScore, 3);
+});
+
 test('large multi-failure evidence deterministically selects xhigh', () => {
   const first = observed({ raw: `src/a/one.mjs:1\n${'x'.repeat(20_000)}` });
   const second = observed({ raw: `src/b/two.mjs:2\n${'y'.repeat(20_000)}` });

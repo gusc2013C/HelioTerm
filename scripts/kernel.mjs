@@ -405,8 +405,23 @@ function outputLines(text) {
   return text.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
 }
 
+function structuredCheckFacts(candidate) {
+  try {
+    const parsed = JSON.parse(candidate);
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.pass !== 'boolean') return null;
+    const checks = Array.isArray(parsed.checks) ? parsed.checks : [];
+    const explicitFailed = Array.isArray(parsed.failedChecks) ? parsed.failedChecks.length : null;
+    const failed = explicitFailed ?? checks.filter((entry) => entry?.pass === false).length;
+    return `check=${parsed.pass ? 'pass' : 'fail'}|failed=${failed}`;
+  } catch { return null; }
+}
+
 export function semanticFacts(text, operation, command = { args: [] }) {
   const lines = outputLines(text);
+  if (operation === 'terminal') {
+    const structured = structuredCheckFacts(text.trim());
+    if (structured) return structured;
+  }
   const pass = /(?:^|\n)(?:#|ℹ) pass (\d+)/u.exec(text)?.[1];
   const fail = /(?:^|\n)(?:#|ℹ) fail (\d+)/u.exec(text)?.[1];
   if (pass !== undefined || fail !== undefined) return `pass=${pass ?? 0}|fail=${fail ?? 0}`;
@@ -418,15 +433,8 @@ export function semanticFacts(text, operation, command = { args: [] }) {
   }
   if (operation === 'build' || operation === 'bench') {
     for (const candidate of [text.trim(), ...[...lines].reverse()]) {
-      try {
-        const parsed = JSON.parse(candidate);
-        if (parsed && typeof parsed === 'object' && typeof parsed.pass === 'boolean') {
-          const checks = Array.isArray(parsed.checks) ? parsed.checks : [];
-          const explicitFailed = Array.isArray(parsed.failedChecks) ? parsed.failedChecks.length : null;
-          const failed = explicitFailed ?? checks.filter((entry) => entry?.pass === false).length;
-          return `check=${parsed.pass ? 'pass' : 'fail'}|failed=${failed}`;
-        }
-      } catch { /* try the next line */ }
+      const structured = structuredCheckFacts(candidate);
+      if (structured) return structured;
     }
   }
   if (operation === 'search') return `matches=${lines.length}`;

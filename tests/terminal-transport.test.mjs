@@ -88,6 +88,20 @@ test('direct universal runner preserves model proof and generic test facts', asy
   assert.equal(result.text.includes('more=1'), false);
 });
 
+test('compact terminal output trusts a top-level JSON check over nested test prose', async () => {
+  const result = await runTerminalDirect({
+    terminal: {
+      program: process.execPath,
+      args: ['-e', "console.log(JSON.stringify({pass:true,evidence:'38 passed and 2 failed'}))"],
+    },
+    cwd: process.cwd(),
+    timeoutMilliseconds: 5000,
+    adaptive: false,
+  });
+  assert.equal(result.pass, true, result.text);
+  assert.match(result.text, /^OK\|calls=1\|check=pass\|failed=0\|raw=\d+\|ms=\d+\|model=0$/u);
+});
+
 test('terminal runner CLI compresses arbitrary program output', () => {
   const run = spawnSync(process.execPath, [
     'scripts/terminal-runner.mjs', '--cwd', process.cwd(), '--program', process.execPath,

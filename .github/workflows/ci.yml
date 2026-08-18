@@ -25,3 +25,12 @@ jobs:
         run: choco install ripgrep -y --no-progress
       - run: npm test
       - run: npm run preflight
+      - name: Package and smoke-test the final release ZIP in isolation
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP 'helioterm-release-smoke'
+          if (Test-Path -LiteralPath $smokeRoot) { Remove-Item -LiteralPath $smokeRoot -Recurse -Force }
+          git clone --no-hardlinks $env:GITHUB_WORKSPACE $smokeRoot
+          git -C $smokeRoot switch --force-create main
+          & (Join-Path $smokeRoot 'scripts\package-release.ps1') -OutputDirectory (Join-Path $smokeRoot 'dist')
+          if ($LASTEXITCODE -ne 0) { throw 'Clean-clone release packaging smoke failed.' }

@@ -108,7 +108,7 @@ test('MCP stdio implements initialize, tool listing, and compact tool call', () 
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const responses = run.stdout.trim().split(/\r?\n/u).map(JSON.parse);
   assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.name, 'helioterm');
-  assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.4.0');
+  assert.equal(responses.find((entry) => entry.id === 1).result.serverInfo.version, '0.4.1');
   assert.deepEqual(responses.find((entry) => entry.id === 2).result.tools.map((tool) => tool.name), [
     'observe', 'batch', 'run', 'supervise', 'terminal', 'terminal_batch', 'terminal_batch_start', 'terminal_supervise', 'job_start', 'terminal_start', 'job_wait', 'job_cancel', 'savings', 'compression_retrieve', 'rollout_audit', 'luna_context', 'luna_accept',
   ]);
@@ -876,14 +876,14 @@ test('MCP adaptive context and acceptance bridge one Desktop Luna ticket', () =>
   }
 });
 
-test('release base metadata stays aligned at 0.4.0 with an optional Codex cachebuster', () => {
+test('release base metadata stays aligned at 0.4.1 with an optional Codex cachebuster', () => {
   const packageMetadata = JSON.parse(readFileSync('package.json', 'utf8'));
   const pluginMetadata = JSON.parse(readFileSync('.codex-plugin/plugin.json', 'utf8'));
   const mcpSource = readFileSync('scripts/mcp-server.mjs', 'utf8');
-  assert.equal(packageMetadata.version, '0.4.0');
+  assert.equal(packageMetadata.version, '0.4.1');
   assert.equal(pluginMetadata.version.split('+')[0], packageMetadata.version);
-  assert.match(pluginMetadata.version, /^0\.4\.0(?:\+codex\.[A-Za-z0-9.-]+)?$/u);
-  assert.match(mcpSource, /const VERSION = '0\.4\.0';/u);
+  assert.match(pluginMetadata.version, /^0\.4\.1(?:\+codex\.[A-Za-z0-9.-]+)?$/u);
+  assert.match(mcpSource, /const VERSION = '0\.4\.1';/u);
 });
 
 test('MCP role fails closed instead of falling back to a shell', () => {

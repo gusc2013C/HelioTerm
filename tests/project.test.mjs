@@ -76,6 +76,43 @@ test('project installer registers a stable local role idempotently', () => {
   }
 });
 
+test('bootstrap previews Codex writes and performs isolated project setup with explicit write mode', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'helioterm-bootstrap-'));
+  const script = resolve('scripts/bootstrap-install.mjs');
+  try {
+    const preview = spawnSync(process.execPath, [script, '--project', directory, '--compact'], { encoding: 'utf8' });
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const previewPayload = JSON.parse(preview.stdout);
+    assert.equal(previewPayload.written, false);
+    assert.equal(previewPayload.commands.some(({ name }) => name === 'marketplace'), true);
+    assert.equal(existsSync(resolve(directory, '.codex')), false);
+
+    const typo = spawnSync(process.execPath, [script, '--project', directory, '--skip-codez', '--write', '--compact'], { encoding: 'utf8' });
+    assert.notEqual(typo.status, 0);
+    assert.equal(existsSync(resolve(directory, '.codex')), false);
+
+    const written = spawnSync(process.execPath, [script, '--project', directory, '--skip-codex', '--write', '--compact'], { encoding: 'utf8' });
+    assert.equal(written.status, 0, written.stderr || written.stdout);
+    const payload = JSON.parse(written.stdout);
+    assert.equal(payload.written, true);
+    assert.equal(payload.codexHome, null);
+    assert.equal(existsSync(resolve(directory, '.codex', 'agents', 'helioterm.toml')), true);
+    assert.equal(existsSync(resolve(directory, '.codex', 'agents', 'helioterm-mcp.toml')), true);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('release packager validates the extracted ZIP and isolated bootstrap output', () => {
+  const packaging = readFileSync('scripts/package-release.ps1', 'utf8');
+  assert.match(packaging, /git .* archive/u);
+  assert.match(packaging, /Expand-Archive/u);
+  assert.match(packaging, /scripts\\preflight\.mjs/u);
+  assert.match(packaging, /bootstrap-install\.mjs/u);
+  assert.match(packaging, /--skip-codex --write --compact/u);
+  assert.match(packaging, /Get-FileHash/u);
+});
+
 test('rollout locator handles metadata lines larger than 16 KiB', () => {
   const directory = mkdtempSync(resolve(tmpdir(), 'helioterm-locator-'));
   try {

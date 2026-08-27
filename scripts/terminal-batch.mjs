@@ -5,6 +5,11 @@ export const TERMINAL_BATCH_MIN_COMMANDS = 2;
 export const TERMINAL_BATCH_MAX_COMMANDS = 4;
 const STEP_EVIDENCE_BYTES = 4096;
 
+function resultPassed(result) {
+  if (!result || !result.text?.startsWith('OK|')) return false;
+  return result.exitCode === undefined || result.exitCode === 0;
+}
+
 function clipUtf8(value, maxBytes) {
   let result = '';
   let size = 0;
@@ -46,10 +51,10 @@ export async function runTerminalBatch({ terminals, cwd, timeoutMilliseconds }) 
       timeoutMilliseconds: Math.max(1, deadline - Date.now()),
     });
     results.push(observed);
-    if (!observed.text.startsWith('OK|')) break;
+    if (!resultPassed(observed)) break;
   }
   const durationMilliseconds = Math.max(0, Math.round(performance.now() - started));
-  const pass = results.length === terminals.length && results.every((result) => result.text.startsWith('OK|'));
+  const pass = results.length === terminals.length && results.every(resultPassed);
   const steps = results.map((result, index) => Object.freeze({
     index: index + 1,
     exitCode: result.exitCode ?? (result.text.startsWith('OK|') ? 0 : 1),
@@ -61,7 +66,7 @@ export async function runTerminalBatch({ terminals, cwd, timeoutMilliseconds }) 
   }));
   const stepSummary = steps.map((step) => `${step.index}:${step.exitCode === 0 ? 'ok' : `fail/${step.exitCode}`}`).join(',');
   const stoppedAt = !pass && results.length < terminals.length ? results.length + 1 : null;
-  const failed = results.find((result) => !result.text.startsWith('OK|'));
+  const failed = results.find((result) => !resultPassed(result));
   const failedSample = failed ? `|sample=${clipUtf8(failed.text.replace(/\|/gu, ','), 96)}` : '';
   const rawBytes = steps.reduce((sum, step) => sum + step.rawBytes, 0);
   const body = steps.map((step) => `[terminal-${step.index}|exit=${step.exitCode}|ms=${step.durationMilliseconds}]\n${step.evidence}`).join('\n');

@@ -13,12 +13,12 @@ export const TERMINAL_LIMITS = Object.freeze({
 const WINDOWS_SHIM_SPEC_ENV = 'HELIOTERM_WINDOWS_SHIM_SPEC_V1';
 const WINDOWS_SHIM_SCRIPT = [
   "$ProgressPreference='SilentlyContinue'",
+  "$ErrorActionPreference='Stop'",
   `$json=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:${WINDOWS_SHIM_SPEC_ENV}))`,
   '$spec=$json|ConvertFrom-Json',
   '$program=[string]$spec.program',
   '$arguments=@($spec.args|ForEach-Object {[string]$_})',
-  '& $program @arguments',
-  'exit $LASTEXITCODE',
+  'try { & $program @arguments; exit ([int]$LASTEXITCODE) } catch { Write-Error $_; exit 1 }',
 ].join(';');
 
 function byteLength(value) { return Buffer.byteLength(value, 'utf8'); }

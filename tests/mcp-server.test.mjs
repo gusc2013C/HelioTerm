@@ -346,6 +346,32 @@ test('MCP terminal_batch validates atomically and stops before commands after a 
   }
 });
 
+test('MCP terminal_batch propagates missing executable failure and stops subsequent commands', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-terminal-batch-missing-'));
+  const marker = join(root, 'must-not-exist');
+  const missingProgram = join(root, 'missing-executable');
+  const writeMarker = `require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad')`;
+  try {
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'terminal_batch', arguments: {
+      cwd: root, adaptive: false, commands: [
+        { program: missingProgram },
+        { program: process.execPath, args: ['-e', writeMarker] },
+      ],
+    } } };
+    const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], { input: `${JSON.stringify(request)}\n`, encoding: 'utf8', timeout: 10000 });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const result = JSON.parse(run.stdout.trim()).result;
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /^FAIL\|calls=1\|requested=2\|steps=1:fail\/1\|stopped=2/u);
+    assert.equal(result.structuredContent.failedAt, 1);
+    assert.equal(result.structuredContent.stoppedAt, 2);
+    assert.equal(result.structuredContent.steps[0].exitCode, 1);
+    assert.equal(existsSync(marker), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('MCP terminal_batch enforces one whole-batch timeout budget and skips remaining commands', () => {
   const root = mkdtempSync(join(tmpdir(), 'helioterm-terminal-batch-timeout-'));
   const marker = join(root, 'must-not-exist');

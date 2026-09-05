@@ -322,6 +322,20 @@ function contentResult(text, { isError = false, structuredContent } = {}) {
   };
 }
 
+function executionPassed(result, status = null) {
+  if (typeof result?.pass === 'boolean') return result.pass;
+  if (Number.isInteger(result?.exitCode)) return result.exitCode === 0;
+  if (status === 'failed' || status === 'cancelled') return false;
+  const text = String(result?.text ?? '');
+  if (text.startsWith('FAIL|') || /(?:^|\|)status=fail(?:\||$)/u.test(text)) return false;
+  return text.startsWith('OK|') || status === 'completed';
+}
+
+function executionExitCode(result, status = null) {
+  if (Number.isInteger(result?.exitCode)) return result.exitCode;
+  return executionPassed(result, status) ? 0 : 1;
+}
+
 function configuredCompressionService() {
   const settings = loadSettings().compression;
   const signature = JSON.stringify(settings);
@@ -333,8 +347,19 @@ function configuredCompressionService() {
   return compressionService;
 }
 
-async function compressedEvidence(content, { maxBytes = 8192, operation = 'terminal', commandRawBytes = null, allowHeadroom = false, cwd = null } = {}) {
+async function compressedEvidence(content, {
+  maxBytes = 8192,
+  operation = 'terminal',
+  commandRawBytes = null,
+  allowHeadroom = false,
+  cwd = null,
+  pass,
+  exitCode = null,
+  status = null,
+} = {}) {
   const compressed = await configuredCompressionService().compress(content, { maxBytes, allowHeadroom });
+  const succeeded = typeof pass === 'boolean' ? pass : (Number.isInteger(exitCode) ? exitCode === 0 : status !== 'failed' && status !== 'cancelled');
+  const effectiveExitCode = Number.isInteger(exitCode) ? exitCode : (succeeded ? 0 : 1);
   const savedBytes = compressed.rawBytes - compressed.compressedBytes;
   const facts = [
     `compressed=${compressed.compressed ? 1 : 0}`,
@@ -347,19 +372,21 @@ async function compressedEvidence(content, { maxBytes = 8192, operation = 'termi
     ...(compressed.handle ? [`handle=${compressed.handle}`] : []),
     ...(compressed.fallback ? ['fallback=1'] : []),
     ...(commandRawBytes !== null ? [`commandRaw=${commandRawBytes}`] : []),
-    'inspired=headroom',
     'model=0',
   ];
   const complete = compressed.compressed || compressed.compressedBytes >= compressed.rawBytes;
-  const canonical = `${complete ? 'OK' : 'MORE'}|calls=1|operation=${operation}|${facts.join('|')}`;
+  const canonical = `${succeeded ? (complete ? 'OK' : 'MORE') : 'FAIL'}|calls=1${succeeded ? '' : `|exit=${effectiveExitCode}`}|operation=${operation}|${facts.join('|')}`;
   let adaptive = null;
   if (compressed.format === 'text' && compressed.compressed) {
+    const routeText = succeeded ? canonical.replace('|calls=1|', '|calls=1|more=1|') : canonical;
     adaptive = attachAdaptiveRoute({
       result: {
-        text: `OK|calls=1|more=1|operation=${operation}|${facts.join('|')}`,
+        text: routeText,
         operation,
         adaptiveEvidence: content,
         savings: { rawBytes: compressed.rawBytes },
+        pass: succeeded,
+        exitCode: effectiveExitCode,
       },
       semantic: true,
       cwd,
@@ -372,6 +399,8 @@ async function compressedEvidence(content, { maxBytes = 8192, operation = 'termi
   return {
     text,
     compressed,
+    pass: succeeded,
+    exitCode: effectiveExitCode,
     adaptive: adaptive?.adaptive ?? null,
     savings: measureTokenSavingsFromBytes({ rawBytes: compressed.rawBytes, compactText: text }),
   };
@@ -379,30 +408,32 @@ async function compressedEvidence(content, { maxBytes = 8192, operation = 'termi
 
 function compressedStructuredContent(envelope, extra = {}) {
   const value = envelope.compressed;
-  return {
+  const compression = {
+    backend: value.backend,
+    format: value.format,
+    compressed: value.compressed,
+    rawBytes: value.rawBytes,
+    compressedBytes: value.compressedBytes,
+    savedBytes: value.rawBytes - value.compressedBytes,
+    ...(value.retrievable ? { retrievable: true } : {}),
+    ...(value.handle ? { handle: value.handle } : {}),
+    ...(Array.isArray(value.transforms) && value.transforms.length ? { transforms: value.transforms } : {}),
+    ...(value.fallback === true ? { fallback: true } : {}),
+  };
+  const result = {
     ...extra,
-    compression: {
-      backend: value.backend,
-      format: value.format,
-      compressed: value.compressed,
-      rawBytes: value.rawBytes,
-      compressedBytes: value.compressedBytes,
-      savedBytes: value.rawBytes - value.compressedBytes,
-      retrievable: value.retrievable,
-      handle: value.handle,
-      transforms: value.transforms,
-      fallback: value.fallback === true,
-      attribution: 'Headroom Contributors; documented ContentRouter/CCR/live-zone concepts; Apache-2.0',
-    },
-    semanticCompression: envelope.adaptive?.routed ? {
+    pass: envelope.pass,
+    exitCode: envelope.exitCode,
+    compression,
+  };
+  if (envelope.adaptive?.routed) result.semanticCompression = {
       backend: 'luna',
       routed: true,
       ticket: envelope.adaptive.ticket.handle,
       effort: envelope.adaptive.ticket.effort,
       reason: envelope.adaptive.decision.reason,
-    } : { routed: false },
-    modelPolls: 0,
-  };
+    };
+  return result;
 }
 
 async function handleExecution(message, mode) {
@@ -415,10 +446,12 @@ async function handleExecution(message, mode) {
       operation: observed.operation,
       commandRawBytes: observed.savings?.rawBytes ?? null,
       cwd: args.cwd,
+      pass: executionPassed(observed),
+      exitCode: executionExitCode(observed),
     });
     savingsMeter.record(envelope.savings);
     send({ jsonrpc: '2.0', id: message.id, result: contentResult(envelope.text, {
-      isError: observed.text.startsWith('FAIL|'),
+      isError: !executionPassed(observed),
       structuredContent: compressedStructuredContent(envelope, { operation: observed.operation, commandRawBytes: observed.savings?.rawBytes ?? null }),
     }) });
     return;
@@ -446,7 +479,7 @@ async function handleExecution(message, mode) {
   const result = routeResult(observed, args, facts);
   savingsMeter.record(result.savings);
   send({ jsonrpc: '2.0', id: message.id, result: contentResult(result.text, {
-    isError: result.text.startsWith('FAIL|'),
+    isError: !executionPassed(observed),
     structuredContent: supervised ? { waitedMilliseconds: observed.durationMilliseconds, modelPolls: 0 } : undefined,
   }) });
 }
@@ -510,10 +543,12 @@ async function handleTerminalExecution(message, mode) {
       commandRawBytes: observed.rawBytes ?? observed.savings?.rawBytes ?? null,
       allowHeadroom: true,
       cwd: args.cwd,
+      pass: executionPassed(observed),
+      exitCode: executionExitCode(observed),
     });
     savingsMeter.record(envelope.savings);
     send({ jsonrpc: '2.0', id: message.id, result: contentResult(envelope.text, {
-      isError: !observed.pass,
+      isError: !executionPassed(observed),
       structuredContent: compressedStructuredContent(envelope, {
         terminal: true,
         commandRawBytes: observed.rawBytes ?? observed.savings?.rawBytes ?? null,
@@ -543,7 +578,7 @@ async function handleTerminalExecution(message, mode) {
   const result = routeResult(observed, { ...args, cwd: args.cwd }, facts);
   savingsMeter.record(result.savings);
   send({ jsonrpc: '2.0', id: message.id, result: contentResult(result.text, {
-    isError: result.text.startsWith('FAIL|'),
+    isError: !executionPassed(observed),
     structuredContent: { terminal: true, waitedMilliseconds: observed.durationMilliseconds, modelPolls: 0, windowsShimRetry: observed.windowsShimRetry === true },
   }) });
 }
@@ -654,13 +689,15 @@ async function handle(message) {
             operation: waited.state.operation,
             commandRawBytes: stored.rawBytes ?? stored.savings?.rawBytes ?? null,
             cwd: waited.state.cwd,
+            pass: executionPassed(stored, waited.state.status),
+            exitCode: executionExitCode(stored, waited.state.status),
           });
           savingsMeter.record(envelope.savings, {
             ownerWakeupsAvoided: stored.avoidedOwnerWakeups ?? 0,
             samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
           });
           send({ jsonrpc: '2.0', id: message.id, result: contentResult(envelope.text, {
-            isError: stored.text?.startsWith('FAIL|') === true,
+            isError: !executionPassed(stored, waited.state.status),
             structuredContent: compressedStructuredContent(envelope, {
               job: args.job,
               status: waited.state.status,
@@ -714,7 +751,7 @@ async function handle(message) {
           samplingBoundariesAvoided: stored.avoidedSamplingBoundaries ?? 0,
         });
         send({ jsonrpc: '2.0', id: message.id, result: contentResult(routed.text, {
-          isError: routed.text.startsWith('FAIL|'),
+          isError: !executionPassed(stored, waited.state.status),
           structuredContent: {
             job: args.job,
             status: waited.state.status,

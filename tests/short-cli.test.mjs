@@ -79,6 +79,22 @@ test('short CLI keeps evidence options outside the child argument list', () => {
   assert.match(result.stdout, /short-evidence/u);
 });
 
+test('short CLI forwards an explicit timeout to deterministic compact and evidence execution', () => {
+  const compact = run(['-C', process.cwd(), '-t', '1', '-n', 'bench', 'benchmarks/supervise-wait.mjs', '1800'], 10000);
+  assert.equal(compact.status, 1, compact.stderr || compact.stdout);
+  assert.match(compact.stdout, /^FAIL\|calls=1\|exit=124\|/u);
+
+  const evidence = run(['-C', process.cwd(), '-t', '1', '-e', '4096', 'bench', 'benchmarks/supervise-wait.mjs', '1800'], 10000);
+  assert.equal(evidence.status, 1, evidence.stderr || evidence.stdout);
+  assert.match(evidence.stdout, /^FAIL\|calls=1\|exit=124\|evidence=1\|operation=bench/u);
+});
+
+test('short CLI rejects an invalid deterministic timeout before execution', () => {
+  const result = run(['-C', process.cwd(), '-t', '0', 'bench', 'benchmarks/supervise-wait.mjs', '1800'], 5000);
+  assert.equal(result.status, 2, result.stderr || result.stdout);
+  assert.match(result.stdout.trim(), /^FAIL\|calls=0\|direct-runner-error=--timeout-seconds must be 1\.\.43200\|model=0$/u);
+});
+
 test('short CLI forwards structured environment and stdin without a shell', () => {
   const source = 'process.stdin.once("data",d=>process.stdout.write(process.env.HT_SHORT+":"+d))';
   const result = run(['-C', process.cwd(), '-E', 'HT_SHORT=env-ok', '-i', 'stdin-ok', 'node', '-e', source]);

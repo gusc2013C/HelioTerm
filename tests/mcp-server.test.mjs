@@ -419,7 +419,7 @@ test('MCP compressed response uses native routing before model visibility and re
     assert.equal(run.status, 0, run.stderr || run.stdout);
     const result = JSON.parse(run.stdout.trim()).result;
     assert.match(result.content[0].text, /\|compressed=1\|backend=native\|/u);
-    assert.equal(result.structuredContent.compression.attribution.includes('Headroom Contributors'), true);
+    assert.equal(Object.hasOwn(result.structuredContent.compression, 'attribution'), false);
     const handle = result.structuredContent.compression.handle;
     assert.match(handle, /^[A-Za-z0-9_-]{16}$/u);
 
@@ -432,6 +432,40 @@ test('MCP compressed response uses native routing before model visibility and re
     assert.equal(retrieved.status, 0, retrieved.stderr || retrieved.stdout);
     assert.match(JSON.parse(retrieved.stdout.trim()).result.content[0].text, /ERROR needle 73/u);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('MCP compressed responses keep execution status while omitting unused default metadata', () => {
+  const cases = [
+    { name: 'observe', arguments: { operation: 'version', argument: 'node' }, pass: true, exitCode: 0 },
+    { name: 'observe', arguments: { operation: 'read', argument: 'missing-compressed-regression.txt' }, pass: false, exitCode: 1 },
+    { name: 'terminal', arguments: { program: process.execPath, args: ['-e', 'process.stdout.write("ok")'] }, pass: true, exitCode: 0 },
+    { name: 'terminal', arguments: { program: process.execPath, args: ['-e', 'process.stdout.write("bad");process.exitCode=7'] }, pass: false, exitCode: 7 },
+  ];
+  const requests = cases.map((entry, index) => ({ jsonrpc: '2.0', id: index + 1, method: 'tools/call', params: {
+    name: entry.name,
+    arguments: { ...entry.arguments, cwd: process.cwd(), responseMode: 'compressed', maxBytes: 256, adaptive: false },
+  } }));
+  const run = spawnSync(process.execPath, ['scripts/mcp-server.mjs'], {
+    input: `${requests.map(JSON.stringify).join('\n')}\n`, encoding: 'utf8', timeout: 15000,
+  });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const results = run.stdout.trim().split(/\r?\n/u).map(JSON.parse).sort((left, right) => left.id - right.id).map((entry) => entry.result);
+  assert.equal(results.length, cases.length);
+  const resultBytes = results.reduce((sum, result) => sum + Buffer.byteLength(JSON.stringify(result), 'utf8'), 0);
+  const textBytes = results.reduce((sum, result) => sum + Buffer.byteLength(result.content.map((content) => content.text ?? '').join(''), 'utf8'), 0);
+  assert.ok(resultBytes < 2568, `compressed result overhead did not decrease: ${resultBytes}B`);
+  assert.ok(textBytes < 659, `compressed text overhead did not decrease: ${textBytes}B`);
+  results.forEach((result, index) => {
+    const expected = cases[index];
+    assert.equal(result.isError, !expected.pass);
+    assert.equal(result.structuredContent.pass, expected.pass);
+    assert.equal(result.structuredContent.exitCode, expected.exitCode);
+    assert.equal(Object.hasOwn(result.structuredContent.compression, 'attribution'), false);
+    assert.equal(Object.hasOwn(result.structuredContent.compression, 'fallback'), false);
+    assert.equal(Object.hasOwn(result.structuredContent.compression, 'handle'), false);
+    assert.equal(Object.hasOwn(result.structuredContent.compression, 'transforms'), false);
+    assert.match(result.content[0].text, expected.pass ? /^OK\|/u : /^FAIL\|calls=1\|exit=/u);
+  });
 });
 
 test('MCP auto compression invokes Headroom internally and returns only the shared HelioTerm handle', () => {
@@ -857,7 +891,7 @@ test('failed background result routes to Luna after collection in a fresh MCP pr
     const match = /\|route=luna\|effort=high\|ticket=([A-Za-z0-9_-]{16})\|model=0$/u.exec(result.content[0].text);
     assert.ok(match, result.content[0].text);
     ticket = match[1];
-    assert.equal(result.isError, false);
+    assert.equal(result.isError, true);
     assert.equal(result.structuredContent.status, 'failed');
     assert.equal(result.structuredContent.modelPolls, 0);
     const record = readAdaptiveTicket(ticket);

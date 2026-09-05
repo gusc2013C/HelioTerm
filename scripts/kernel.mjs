@@ -546,7 +546,7 @@ function compact({ exitCode, stdout, stderr, operation, command, cwd, rawBytesOv
   };
 }
 
-function commandTimeout(value) {
+export function validateTimeoutMilliseconds(value) {
   const timeout = value ?? DEFAULT_COMMAND_TIMEOUT_MILLISECONDS;
   if (!Number.isInteger(timeout) || timeout < 1 || timeout > MAX_COMMAND_TIMEOUT_MILLISECONDS) {
     throw new Error(`timeoutMilliseconds must be 1..${MAX_COMMAND_TIMEOUT_MILLISECONDS}`);
@@ -554,27 +554,41 @@ function commandTimeout(value) {
   return timeout;
 }
 
+function commandTimeout(value) {
+  return validateTimeoutMilliseconds(value);
+}
+
+function withExecutionState(result, { command, operation, exitCode }) {
+  return { ...result, command, operation, exitCode, pass: exitCode === 0 };
+}
+
 export async function runCommand({ command, cwd, operation = null, timeoutMilliseconds }) {
+  const requestedTimeout = timeoutMilliseconds ?? DEFAULT_COMMAND_TIMEOUT_MILLISECONDS;
   try {
     const timeout = commandTimeout(timeoutMilliseconds);
     if (command.file === INTERNAL_OBSERVER) {
       const stdout = runObserver({ operation: command.args[0], args: command.args.slice(1), cwd });
-      return { ...compact({ exitCode: 0, stdout, stderr: '', operation, command, cwd }), command, operation };
+      return withExecutionState(compact({ exitCode: 0, stdout, stderr: '', operation, command, cwd }), { command, operation, exitCode: 0 });
     }
     const childEnvironment = { ...process.env };
     delete childEnvironment.NODE_TEST_CONTEXT;
     if (operation === 'pytest' || operation === 'check') childEnvironment.PYTHONDONTWRITEBYTECODE = '1';
     const { stdout, stderr } = await execFileAsync(command.file, command.args, { cwd, env: childEnvironment, windowsHide: true, timeout, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
-    return { ...compact({ exitCode: 0, stdout, stderr, operation, command, cwd }), command, operation };
+    return withExecutionState(compact({ exitCode: 0, stdout, stderr, operation, command, cwd }), { command, operation, exitCode: 0 });
   } catch (error) {
-    const exitCode = Number.isInteger(error.code) ? error.code : 1;
+    const timedOut = error?.code === 'ETIMEDOUT'
+      || (error?.killed === true && error?.signal === 'SIGTERM');
+    const exitCode = timedOut ? 124 : (Number.isInteger(error.code) ? error.code : 1);
     const emptyObservation = exitCode === 1
       && !String(error.stderr ?? '').trim()
       && (operation === 'search' || (operation === 'process' && command.file === 'pgrep'));
     if (emptyObservation) {
-      return { ...compact({ exitCode: 0, stdout: error.stdout ?? '', stderr: '', operation, command, cwd }), command, operation };
+      return withExecutionState(compact({ exitCode: 0, stdout: error.stdout ?? '', stderr: '', operation, command, cwd }), { command, operation, exitCode: 0 });
     }
-    return { ...compact({ exitCode, stdout: error.stdout ?? '', stderr: error.stderr || error.message, operation, command, cwd }), command, operation };
+    const stderr = timedOut
+      ? `${error.stderr || error.message || ''}\nHelioTerm timeout after ${requestedTimeout}ms`
+      : (error.stderr || error.message);
+    return withExecutionState(compact({ exitCode, stdout: error.stdout ?? '', stderr, operation, command, cwd }), { command, operation, exitCode });
   }
 }
 
@@ -729,6 +743,7 @@ export async function runSupervisedCommand({
     command,
     operation,
     exitCode: result.exitCode,
+    pass: result.exitCode === 0,
     rawBytes: result.rawBytes,
     evidenceBody,
     spawnErrorCode: result.spawnErrorCode,
@@ -809,13 +824,17 @@ export async function runEvidenceOperation({ operation, argument, cwd, maxBytes 
     });
     return evidenceOutput({ exitCode: 0, stdout, stderr, operation, command, maxBytes });
   } catch (error) {
-    const exitCode = Number.isInteger(error.code) ? error.code : 1;
+    const timedOut = error?.code === 'ETIMEDOUT'
+      || (error?.killed === true && error?.signal === 'SIGTERM');
+    const exitCode = timedOut ? 124 : (Number.isInteger(error.code) ? error.code : 1);
     const emptyObservation = exitCode === 1 && !String(error.stderr ?? '').trim() && operation === 'search';
     if (emptyObservation) return evidenceOutput({ exitCode: 0, stdout: error.stdout ?? '', operation, command, maxBytes });
     return evidenceOutput({
       exitCode,
       stdout: error.stdout ?? '',
-      stderr: error.stderr || error.message,
+      stderr: timedOut
+        ? `${error.stderr || error.message || ''}\nHelioTerm timeout after ${timeout}ms`
+        : (error.stderr || error.message),
       operation,
       command,
       maxBytes,

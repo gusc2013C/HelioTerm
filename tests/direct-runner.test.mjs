@@ -58,6 +58,37 @@ test('direct evidence CLI is explicit and may return multiple lines', () => {
   assert.match(run.stdout, /\n1:\{/u);
 });
 
+test('direct runner source CLI rejects an invalid timeout with one bounded failure line', () => {
+  const run = spawnSync(process.execPath, [
+    'scripts/direct-runner.mjs', '--request', 'T|bench|benchmarks/supervise-wait.mjs 1800',
+    '--cwd', process.cwd(), '--timeout-seconds', '0',
+  ], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(run.status, 2, run.stderr || run.stdout);
+  assert.equal(run.stdout, 'FAIL|calls=0|direct-runner-error=--timeout-seconds must be 1..43200|model=0\n');
+  assert.equal(run.stdout.trim().split(/\r?\n/u).length, 1);
+});
+
+test('direct runner propagates a bounded timeout through compact and evidence paths', async () => {
+  const compact = await runDirect({
+    request: 'T|bench|benchmarks/supervise-wait.mjs 1800',
+    cwd: process.cwd(),
+    timeoutMilliseconds: 1000,
+  });
+  assert.equal(compact.pass, false, compact.text);
+  assert.equal(compact.exitCode, 124);
+  assert.match(compact.text, /^FAIL\|calls=1\|exit=124\|/u);
+
+  const evidence = await runDirectEvidence({
+    request: 'T|bench|benchmarks/supervise-wait.mjs 1800',
+    cwd: process.cwd(),
+    maxBytes: 4096,
+    timeoutMilliseconds: 1000,
+  });
+  assert.equal(evidence.pass, false, evidence.text);
+  assert.equal(evidence.exitCode, 124);
+  assert.match(evidence.text, /^FAIL\|calls=1\|exit=124\|evidence=1\|operation=bench/u);
+});
+
 test('direct runner batches different observations into one process result', async () => {
   const result = await runDirectBatch({
     requests: ['T|test|tests/firewall.test.mjs', 'T|git|status --short', 'T|git|rev-parse HEAD'],

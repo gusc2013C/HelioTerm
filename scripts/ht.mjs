@@ -189,6 +189,7 @@ export async function runShortCli(argv = process.argv.slice(2)) {
     if (!state.forcedUniversal && DIRECT_OPERATIONS.has(verb)) {
       const directArguments = [
         ...(state.cwd === null ? [] : ['--cwd', state.cwd]),
+        ...(state.timeout === null ? [] : ['--timeout-seconds', state.timeout]),
         '--request', `T|${verb}|${protocolArgument(rest)}`,
         ...(state.evidence ? ['--evidence'] : []),
         ...(state.evidenceBytes === null ? [] : ['--evidence-bytes', state.evidenceBytes]),

@@ -229,18 +229,35 @@ test('files lists one repo-relative directory without a shell', async () => {
 test('direct runner validates a whole batch before executing anything', async () => {
   const result = await runDirectBatch({ requests: ['T|git|status --short', 'T|git|reset --hard'], cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
+  assert.match(result.text, /^FAIL\|calls=0\|request-invalid\|at=2\|reason=operation-argument\|/u);
   assert.deepEqual(result.commands, []);
 });
 
 test('direct runner fails closed before execution for an invalid request', async () => {
   const result = await runDirect({ request: 'please test everything', cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
+  assert.match(result.text, /^FAIL\|calls=0\|request-invalid\|at=1\|reason=request-shape\|/u);
 });
 
 test('direct runner rejects a mutating git operation before execution', async () => {
   const result = await runDirect({ request: 'T|git|reset --hard', cwd: process.cwd() });
   assert.equal(result.pass, false);
-  assert.equal(result.text, 'FAIL|calls=0|request-invalid|model=0');
+  assert.match(result.text, /^FAIL\|calls=0\|request-invalid\|at=1\|reason=operation-argument\|/u);
+});
+
+test('rejection guidance stays bounded and never echoes rejected payloads', async () => {
+  const requests = ['T|read|PRIVATE_PATH.txt 1 201', `T|search|${'秘密'.repeat(100)}`, 'T|unknown|PRIVATE_ARGUMENT'];
+  for (const request of requests) {
+    for (const execute of [runDirect, runDirectEvidence]) {
+      const result = await execute({ request, cwd: process.cwd() });
+      assert.equal(result.pass, false);
+      assert.deepEqual(result.commands, []);
+      assert.match(result.text, /^FAIL\|calls=0\|(?:evidence-)?request-invalid\|at=1\|reason=/u);
+      assert.doesNotMatch(result.text, /PRIVATE|秘密|\r|\n/u);
+      assert.ok(Buffer.byteLength(result.text, 'utf8') <= 256);
+    }
+  }
+  const invalidCount = await runDirectBatch({ requests: Array(5).fill('T|version|node'), cwd: process.cwd() });
+  assert.match(invalidCount.text, /\|reason=batch-size\|hint=1\.\.4 requests\|/u);
+  assert.deepEqual(invalidCount.commands, []);
 });

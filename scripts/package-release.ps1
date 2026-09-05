@@ -98,6 +98,12 @@ try {
     }
 } finally {
     if (Test-Path -LiteralPath $extractionDirectory) {
+        $cleanupTarget = [IO.Path]::GetFullPath($extractionDirectory)
+        $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([char[]]@('\', '/'))
+        if (-not [string]::Equals([IO.Path]::GetDirectoryName($cleanupTarget), $temporaryRoot, [StringComparison]::OrdinalIgnoreCase) -or
+            (Split-Path -Leaf $cleanupTarget) -notmatch '^helioterm-release-[a-f0-9]{32}$') {
+            throw 'Release cleanup path is outside the intended temporary directory.'
+        }
         Remove-Item -LiteralPath $extractionDirectory -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

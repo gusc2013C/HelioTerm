@@ -72,7 +72,7 @@ export class HeadroomMcpClient {
       await this.#request('initialize', {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: 'helioterm', version: '0.4.1' },
+        clientInfo: { name: 'helioterm', version: '0.5.0' },
       });
       this.#notify('notifications/initialized', {});
       const listed = await this.#request('tools/list', {});

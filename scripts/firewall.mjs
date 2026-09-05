@@ -25,6 +25,26 @@ export function validateRequest(request) {
   return { pass: checks.every((entry) => entry.pass), bytes, operation, argument, checks };
 }
 
+// Static guidance only: rejected paths, arguments, and payloads stay out of output.
+export function formatRequestRejection(validation, { index = 1, evidence = false } = {}) {
+  const reason = validation.bytes > HELIOTERM_LIMITS.maxRequestBytes
+    ? 'request-byte-limit'
+    : validation.checks.find((entry) => !entry.pass)?.name ?? 'request-shape';
+  const hints = {
+    'request-byte-limit': 'max256-UTF8-bytes',
+    'request-shape': 'one-line T/operation/argument',
+    'request-operation': 'supported operation required',
+    'operation-argument': {
+      read: 'read path [start>=1] [count=1..200]',
+      list: 'list directory',
+      files: 'files relative-directory',
+      json: 'json path [selector ...]',
+      git: 'read-only git arguments',
+    }[validation.operation] ?? 'check operation syntax',
+  };
+  return `FAIL|calls=0|${evidence ? 'evidence-' : ''}request-invalid|at=${index}|reason=${reason}|hint=${hints[reason]}|model=0`;
+}
+
 export function validateResponse(response) {
   const match = typeof response === 'string' ? /^(OK|FAIL|MATCH|MORE)\|([^\r\n]+)$/u.exec(response) : null;
   const bytes = utf8Bytes(response);

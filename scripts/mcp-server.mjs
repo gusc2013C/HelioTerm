@@ -15,7 +15,7 @@ import { CONTENT_HANDLE_PATTERN, ContentCompressionService } from './content-com
 
 export { commandFor, parseArguments, runEvidenceOperation, runOperation, runSupervisedOperation } from './kernel.mjs';
 
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 export const OBSERVATION_OPERATIONS = Object.freeze([
   'git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'deps', 'version',
 ]);

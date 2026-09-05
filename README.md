@@ -32,6 +32,7 @@ Ordinary plugin use does not require `npm link`: install the plugin and run `$he
 ```powershell
 ht -C . test tests/*.test.mjs
 ht -C . git status --short --branch
+ht -C . batch "git status --short" "version node" "json package.json version"
 ht -C . node --test tests/*.test.mjs
 ht -C . -e 8192 node scripts/custom-check.mjs
 ht -C . bg node scripts/long-job.mjs
@@ -40,6 +41,10 @@ ht -C . wait <job-handle>
 ```
 
 Known deterministic operation names select the firewall path automatically; any other first word is an arbitrary program. Use `exec` before a program only when its name collides with a deterministic operation, for example `ht -C . exec git add path` or `ht -C . exec git --version`. The lower-level `--` form also works when the calling shell preserves it. Use `ht shell powershell "..."` only for pipelines, redirection, or shell built-ins.
+
+`ht batch` accepts two to four quoted, independent read-only observations. It validates the complete batch before running anything and returns one compact result. Quoted paths remain separate arguments; arbitrary programs, mutating Git operations, environment/stdin overrides, and batch evidence mode are rejected. Request exact evidence for one operation when needed. Invalid deterministic requests retain `FAIL|calls=0|request-invalid` (or `evidence-request-invalid`) and add the item number, a reason code, and static syntax guidance without echoing rejected paths or payloads.
+
+Explicit `-t <seconds>` deadlines apply to deterministic compact and evidence paths; timeout is reported as `exit=124`. Compressed responses retain the actual execution status and exit code through Luna routing and background collection. Optional false/null/empty compression metadata is omitted; active retrieval handles and route details remain available. Attribution is retained in [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) rather than repeated in each response.
 
 Run the ordinary direct path from this checkout with:
 
@@ -159,7 +164,7 @@ The bootstrap registers the local marketplace in the active Codex profile, insta
 For a direct Git marketplace install, pin the release tag explicitly:
 
 ```powershell
-codex plugin marketplace add gusc2013C/HelioTerm --ref v0.4.1
+codex plugin marketplace add gusc2013C/HelioTerm --ref v0.5.0
 codex plugin add helioterm@helioterm
 ```
 

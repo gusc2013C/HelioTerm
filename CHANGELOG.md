@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-09-05
+
+- Add `ht batch` for two to four independent read-only observations in one CLI invocation, with atomic validation and preserved quoted paths.
+- Return bounded rejection reasons and syntax hints without echoing rejected paths or payloads, reducing repeated discovery calls.
+- Honor explicit short-CLI deadlines in deterministic compact and evidence paths; reject invalid deadlines before execution and report timeout as exit 124.
+- Preserve execution success, failure, and exit codes through compressed responses, Desktop Luna routing, and background collection.
+- Remove repeated compression attribution and optional empty/default metadata from responses; retain active handles and canonical execution facts.
+- Shorten the terminal skill while retaining routing, lifecycle, and approval constraints. Add a reproducible CLI batching byte benchmark; its results are content measurements, not provider billing.
+
 ## 0.4.1 - 2026-08-18
 
 ### Installation hardening

@@ -8,9 +8,13 @@ const DIRECT_OPERATIONS = new Set([
   'test', 'pytest', 'build', 'git', 'search', 'files', 'bench', 'process',
   'read', 'list', 'json', 'stat', 'count', 'hash', 'check', 'deps', 'version',
 ]);
+const READ_ONLY_BATCH_OPERATIONS = new Set([
+  'git', 'search', 'files', 'process', 'read', 'list', 'json', 'stat', 'count', 'hash', 'deps', 'version',
+]);
 
 const USAGE = `Usage:
   ht [-C <cwd>] [-e [bytes]] [-s] [-n] <operation> [argument ...]
+  ht [-C <cwd>] [-t <seconds>] batch "<operation> <args>" "<operation> <args>" [...]
   ht [-C <cwd>] [-t <seconds>] [-e [bytes]] [-s] [-n] <program> [args ...]
   ht [-C <cwd>] [-t <seconds>] exec <program> [args ...]
   ht [-C <cwd>] [-t <seconds>] [-E NAME=VALUE] [-i <stdin>] bg <program> [args ...]
@@ -138,6 +142,19 @@ async function runTerminal(state, command, extra = []) {
   ]);
 }
 
+async function runDirectCli(state, requests) {
+  const { runCli } = await import('./direct-runner.mjs');
+  await runCli([
+    ...(state.cwd === null ? [] : ['--cwd', state.cwd]),
+    ...(state.timeout === null ? [] : ['--timeout-seconds', state.timeout]),
+    ...requests.flatMap((request) => ['--request', request]),
+    ...(state.evidence ? ['--evidence'] : []),
+    ...(state.evidenceBytes === null ? [] : ['--evidence-bytes', state.evidenceBytes]),
+    ...(state.semantic ? ['--semantic'] : []),
+    ...(!state.adaptive ? ['--no-adaptive'] : []),
+  ]);
+}
+
 export async function runShortCli(argv = process.argv.slice(2)) {
   try {
     const state = parse(argv);
@@ -152,6 +169,19 @@ export async function runShortCli(argv = process.argv.slice(2)) {
     if (!state.command.length) throw new Error('command is required');
 
     const [verb, ...rest] = state.command;
+    if (!state.forcedUniversal && verb === 'batch') {
+      if (rest.length < 2 || rest.length > 4) throw new Error('batch requires 2..4 quoted read-only observations');
+      if (state.evidence) throw new Error('batch is compact; request evidence for one operation');
+      if (state.env.length || state.stdin !== null) throw new Error('batch does not accept environment or stdin overrides');
+      const { parseArguments } = await import('./kernel.mjs');
+      const requests = rest.map((request, index) => {
+        const [operation, ...args] = parseArguments(request);
+        if (!READ_ONLY_BATCH_OPERATIONS.has(operation)) throw new Error(`batch item ${index + 1} must be a read-only operation`);
+        return `T|${operation}|${protocolArgument(args)}`;
+      });
+      await runDirectCli(state, requests);
+      return;
+    }
     if (verb === 'config') {
       const { runSettingsCli } = await import('./settings.mjs');
       await runSettingsCli(rest);
@@ -187,17 +217,7 @@ export async function runShortCli(argv = process.argv.slice(2)) {
       return;
     }
     if (!state.forcedUniversal && DIRECT_OPERATIONS.has(verb)) {
-      const directArguments = [
-        ...(state.cwd === null ? [] : ['--cwd', state.cwd]),
-        ...(state.timeout === null ? [] : ['--timeout-seconds', state.timeout]),
-        '--request', `T|${verb}|${protocolArgument(rest)}`,
-        ...(state.evidence ? ['--evidence'] : []),
-        ...(state.evidenceBytes === null ? [] : ['--evidence-bytes', state.evidenceBytes]),
-        ...(state.semantic ? ['--semantic'] : []),
-        ...(!state.adaptive ? ['--no-adaptive'] : []),
-      ];
-      const { runCli } = await import('./direct-runner.mjs');
-      await runCli(directArguments);
+      await runDirectCli(state, [`T|${verb}|${protocolArgument(rest)}`]);
       return;
     }
     await runTerminal(state, state.command);

@@ -2,7 +2,7 @@
 
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HELIOTERM_LIMITS, validateRequest } from './firewall.mjs';
+import { formatRequestRejection, HELIOTERM_LIMITS, validateRequest } from './firewall.mjs';
 import {
   assertWorkingDirectory,
   commandFor,
@@ -102,9 +102,13 @@ async function executePrepared(prepared, cwd, timeoutMilliseconds) {
 export async function runDirectBatch({ requests, cwd, adaptive = false, semantic = false, timeoutMilliseconds = DEFAULT_COMMAND_TIMEOUT_MILLISECONDS }) {
   const timeout = validateTimeoutMilliseconds(timeoutMilliseconds);
   const list = Array.isArray(requests) ? requests : [];
+  if (!list.length || list.length > HELIOTERM_LIMITS.maxCommandsPerRequest) {
+    return { text: 'FAIL|calls=0|request-invalid|reason=batch-size|hint=1..4 requests|model=0', pass: false, elapsedMs: 0, commands: [] };
+  }
   const parsed = list.map(validateRequest);
-  if (!list.length || list.length > HELIOTERM_LIMITS.maxCommandsPerRequest || parsed.some((entry) => !entry.pass)) {
-    return { text: 'FAIL|calls=0|request-invalid|model=0', pass: false, elapsedMs: 0, commands: [] };
+  const invalidIndex = parsed.findIndex((entry) => !entry.pass);
+  if (invalidIndex >= 0) {
+    return { text: formatRequestRejection(parsed[invalidIndex], { index: invalidIndex + 1 }), pass: false, elapsedMs: 0, commands: [] };
   }
   const started = performance.now();
   try {
@@ -166,7 +170,10 @@ export async function runDirect({ request, cwd, adaptive = false, semantic = fal
 export async function runDirectEvidence({ request, cwd, maxBytes = 8192, timeoutMilliseconds = DEFAULT_COMMAND_TIMEOUT_MILLISECONDS }) {
   const timeout = validateTimeoutMilliseconds(timeoutMilliseconds);
   const parsed = validateRequest(request);
-  if (!parsed.pass || !EVIDENCE_OPERATIONS.has(parsed.operation)) {
+  if (!parsed.pass) {
+    return { text: formatRequestRejection(parsed, { evidence: true }), pass: false, commands: [] };
+  }
+  if (!EVIDENCE_OPERATIONS.has(parsed.operation)) {
     return { text: 'FAIL|calls=0|evidence-request-invalid|model=0', pass: false, commands: [] };
   }
   try {

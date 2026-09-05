@@ -26,7 +26,7 @@ node <root>/scripts/direct-runner.mjs --cwd <project> --request "T|operation|arg
 node <root>/scripts/terminal-runner.mjs --cwd <project> --program <executable> -- <child arguments...>
 ```
 
-Use `observe` for read-only work, `run` for tests/builds/checks/benchmarks, and `terminal` for other commands. Batch two to four independent observations known up front with MCP `batch`, or repeated direct `--request`. Each request is one line, at most 256 UTF-8 bytes. `terminal_batch` validates two to four preplanned arbitrary commands, runs sequentially, and stops on failure. Never batch across a dependent decision or approval.
+Use `observe` for read-only work, `run` for tests/builds/checks/benchmarks, and `terminal` for other commands. Batch two to four independent observations known up front with MCP `batch`, `ht -C <project> batch "git status --short" "version node"`, or repeated direct `--request`. CLI batches are compact and read-only; request evidence for one item separately. Each request is one line, at most 256 UTF-8 bytes. On `request-invalid`, follow its `reason` and static `hint` to correct the indicated item. `terminal_batch` validates two to four preplanned arbitrary commands, runs sequentially, and stops on failure. Never batch across a dependent decision or approval.
 
 Deterministic arguments run shell-free; traversal, unsupported command families, interpreter evaluation, and mutating package operations are rejected. Operations:
 

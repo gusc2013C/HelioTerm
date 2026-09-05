@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,7 +23,7 @@ test('package registers both short and descriptive executable names', () => {
 test('short CLI reports the release version and concise help', () => {
   const version = run(['--version']);
   assert.equal(version.status, 0, version.stderr || version.stdout);
-  assert.equal(version.stdout.trim(), '0.4.1');
+  assert.equal(version.stdout.trim(), '0.5.0');
   const help = run(['--help']);
   assert.equal(help.status, 0, help.stderr || help.stdout);
   assert.match(help.stdout, /^Usage:\n  ht /u);
@@ -77,6 +77,43 @@ test('short CLI keeps evidence options outside the child argument list', () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^OK\|calls=1\|evidence=1\|operation=terminal/u);
   assert.match(result.stdout, /short-evidence/u);
+});
+
+test('short CLI batches independent observations and preserves quoted paths', () => {
+  const root = mkdtempSync(join(tmpdir(), 'helioterm-short-batch-'));
+  const file = join(root, 'two words.txt');
+  writeFileSync(file, 'space-aware batch\n');
+  try {
+    const result = run(['-C', root, '-n', 'batch', 'read "two words.txt" 1 1', 'count "two words.txt"', 'version node']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /^OK\|calls=3\|ops=read\/1,count\/1,version\/1\|/u);
+    assert.match(result.stdout, /space-aware batch/u);
+    assert.equal(result.stdout.trim().split(/\r?\n/u).length, 1);
+    assert.ok(Buffer.byteLength(result.stdout.trim()) <= 256);
+  } finally {
+    rmSync(file);
+    rmdirSync(root);
+  }
+});
+
+test('short CLI rejects the whole batch before execution on invalid input', () => {
+  const cases = [
+    ['batch', 'version node'],
+    ['batch', ...Array(5).fill('version node')],
+    ['batch', 'version node', 'node --version'],
+    ['batch', 'version node', 'git reset --hard'],
+    ['-e', '256', 'batch', 'version node', 'version git'],
+    ['-E', 'HT_BATCH=value', 'batch', 'version node', 'version git'],
+    ['-t', '0', 'batch', 'version node', 'version git'],
+  ];
+  for (const args of cases) {
+    const result = run(['-C', process.cwd(), ...args]);
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stdout, /^FAIL\|calls=0\|/u);
+  }
+  const invalidRead = run(['-C', process.cwd(), 'batch', 'version node', 'read private-path.txt 1 201']);
+  assert.match(invalidRead.stdout, /\|at=2\|reason=operation-argument\|hint=read path \[start>=1\] \[count=1\.\.200\]/u);
+  assert.doesNotMatch(invalidRead.stdout, /private-path/u);
 });
 
 test('short CLI forwards an explicit timeout to deterministic compact and evidence execution', () => {
